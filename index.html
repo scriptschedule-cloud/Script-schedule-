@@ -1,247 +1,83 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="ScriptSchedule — a premium family prescription medication manager. Scan prescriptions, build schedules, and keep every family member on track." />
-  <meta property="og:title" content="ScriptSchedule — Never miss a dose again." />
-  <meta property="og:description" content="Scan prescriptions. Build schedules. Keep your whole family on track." />
-  <meta property="og:image" content="assets/paper-before.png" />
-  <title>ScriptSchedule — Family Prescription Manager</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css" />
+<title>ScriptSchedule</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { font-family: Arial; background:#2C2420; color:#fff; padding:20px;}
+.card { background:#3a312c; padding:15px; border-radius:12px; margin-bottom:12px;}
+button { padding:10px 14px; border:none; border-radius:8px; margin-top:6px;}
+input { padding:8px; width:100%; margin-top:6px;}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="container nav">
-      <a href="#" class="brand brand-with-mark" aria-label="ScriptSchedule home">
-        <img src="assets/brand-mark.png" alt="ScriptSchedule logo mark" class="nav-mark" />
-        <span><span class="brand-script">Script</span><span class="brand-schedule">Schedule</span></span>
-      </a>
-      <nav class="nav-links">
-        <a href="#features">Features</a>
-        <a href="#family">Family</a>
-        <a href="#beta">Join Beta</a>
-      </nav>
-      <a href="#beta" class="button button-small">Join Beta</a>
-    </div>
-  </header>
 
-  <main>
-    <section class="hero">
-      <div class="container hero-grid">
-        <div class="hero-copy">
-          <div class="eyebrow">SCAN · SCHEDULE · REMIND</div>
-          <h1>Never miss a dose again.</h1>
-          <p class="hero-text">
-            Track your family’s medications—without the stress.
-          </p>
-          <p class="hero-mini">
-            Simple. Organized. Done.
-          <p class="hero-paper">No more paper reminders or guesswork.</p>
-          </p>
+<h2>ScriptSchedule (LIVE)</h2>
 
-          <div class="hero-logo-lockup" aria-label="ScriptSchedule brand mark">
-            <div class="hero-logo-card">
-              <img src="assets/brand-mark.png" alt="ScriptSchedule logo" />
-            </div>
-            <div class="hero-logo-note">Built for real life.</div>
-          </div>
+<div class="card">
+<h3>Add Family Member</h3>
+<input id="name" placeholder="Name"/>
+<button onclick="addMember()">Add</button>
+</div>
 
-          <div class="hero-actions">
-            <a href="#beta" class="button">Join the Beta</a>
-            <a href="#showcase" class="text-link">See the app</a>
-          </!</span>
-            <span>Reminder-first design</span>
-          </div>
-        </div>
+<div id="members"></div>
 
-        <div class="hero-visual">
-          <div class="phone-shell">
-            <img src="assets/paper-before.png" alt="ScriptSchedule app interface preview" />
-          </div>
-        
-          <article class="feature-card">
-            <div class="feature-number">04</div>
-            <h3>Shared Dashboard</h3>
-            <p>Know what’s been taken—without asking. Everyone stays in sync across your family.</p>
-          </article>
+<script>
+let data = JSON.parse(localStorage.getItem('scriptSchedule') || '[]');
 
-        </div>
-      </div>
-    </section>
+function save(){
+  localStorage.setItem('scriptSchedule', JSON.stringify(data));
+  render();
+}
 
-<section class="before-after">
-  <div class="container narrow">
-    <div class="before-after-image">
-      <img src="assets/paper-before.png" alt="Before and after medication tracking" />
-    </div>
-    <h2>No more paper reminders or guesswork.</h2>
-    <p class="section-copy">From this → to simple.</p>
-    <p class="section-sub">Everyone stays in sync.</p>
-  </div>
-</section>
+function addMember(){
+  const name = document.getElementById('name').value;
+  if(!name) return;
+  data.push({name, meds:[]});
+  document.getElementById('name').value='';
+  save();
+}
 
-    <section class="stats-strip">
-      <div class="container stats-row">
-        <div><strong>50%</strong><span>of prescriptions aren’t taken as directed</span></div>
-        <div><strong>125,000+</strong><span>deaths each year from missed medications</span></div>
-        <div><strong>$300B</strong><span>cost of non-adherence annually</span></div>
-      </div>
-      <p class="stats-note">Missing doses can make medications less effective—and harder to manage over time.</p>
-    </section>
+function addMed(i){
+  const med = prompt("Medication name?");
+  if(!med) return;
+  data[i].meds.push({name:med, taken:false});
+  save();
+}
 
-    <section id="showcase" class="showcase">
-      <div class="container narrow">
-        <div class="section-label">Designed to feel calm</div>
-        <h2>Everything your family needs, in one place.</h2>
-        <p class="section-copy">
-          A premium, minimal experience for scanning prescriptions, managing medications,
-          and checking what is due today without digging through notes or pill bottles.
-        </p>
-        <div class="showcase-card">
-          <img src="assets/paper-before.png" alt="ScriptSchedule app screens and product system" />
-        
-          <article class="feature-card">
-            <div class="feature-number">04</div>
-            <h3>Shared Dashboard</h3>
-            <p>Know what’s been taken—without asking. Everyone stays in sync across your family.</p>
-          </article>
+function toggle(i,j){
+  data[i].meds[j].taken = !data[i].meds[j].taken;
+  save();
+}
 
-        </div>
-      </div>
-    </section>
+function render(){
+  const container = document.getElementById('members');
+  container.innerHTML='';
 
-    
-    <section class="emotional">
-      <div class="container narrow">
-        <h2>Life is already busy enough.<br/>Taking care of medications shouldn’t be.</h2>
-      </div>
-    </section>
+  data.forEach((m,i)=>{
+    let div = document.createElement('div');
+    div.className='card';
 
-<section id="features" class="features">
-      <div class="container narrow">
-        <div class="section-label">How it works</div>
-        <h2>Three simple steps.</h2>
-        <div class="feature-grid">
-          <article class="feature-card">
-            <div class="feature-number">01</div>
-            <h3>Scan</h3>
-            <p>Capture the prescription label and let the app pull in the essentials fast.</p>
-          </article>
-          <article class="feature-card">
-            <div class="feature-number">02</div>
-            <h3>Schedule</h3>
-            <p>Turn directions into a clear routine with times, reminders, and medication details.</p>
-          </article>
-          <article class="feature-card">
-            <div class="feature-number">03</div>
-            <h3>Remind</h3>
-            <p>Track medications for yourself or your family with one dashboard built for real life.</p>
-          </article>
-        
-          <article class="feature-card">
-            <div class="feature-number">04</div>
-            <h3>Shared Dashboard</h3>
-            <p>Know what’s been taken—without asking. Everyone stays in sync across your family.</p>
-          </article>
+    div.innerHTML = `
+      <h3>${m.name}</h3>
+      <button onclick="addMed(${i})">Add Medication</button>
+    `;
 
-        </div>
-      </div>
-    </section>
+    m.meds.forEach((med,j)=>{
+      let medDiv = document.createElement('div');
+      medDiv.innerHTML = `
+        <p>${med.name} — ${med.taken ? "✅ Taken" : "❌ Not taken"}</p>
+        <button onclick="toggle(${i},${j})">Mark</button>
+      `;
+      div.appendChild(medDiv);
+    });
 
-    
-    <section class="refill">
-      <div class="container narrow">
-        <h2>Never run out unexpectedly.</h2>
-        <p class="section-copy">Get reminded before it’s time to refill, so you’re never caught off guard.</p>
-      </div>
-    </section>
+    container.appendChild(div);
+  });
+}
 
-<section id="family" class="family">
-      <div class="container family-grid">
-        <div>
-          <div class="section-label">Built for real families</div>
-          <h2>Not just another medication tracker.</h2>
-          <p class="section-copy left">
-            ScriptSchedule was designed for households managing more than one person’s prescriptions.
-            Parents, spouses, and caregivers need a tool that feels organized, private, and simple.
-          </p>
-        </div>
+render();
+</script>
 
-        <div class="family-card">
-          <div class="family-item">
-            <strong>One place for everyone</strong>
-            <span>Keep family routines organized without separate spreadsheets, texts, or notes.</span>
-          </div>
-          <div class="family-item">
-            <strong>Clear daily visibility</strong>
-            <span>See what is coming up, what has been taken, and what still needs attention.</span>
-          </div>
-          <div class="family-item">
-            <strong>Premium, calm design</strong>
-            <span>Made to feel trustworthy and simple instead of clinical or overwhelming.</span>
-          </div>
-        
-          <article class="feature-card">
-            <div class="feature-number">04</div>
-            <h3>Shared Dashboard</h3>
-            <p>Know what’s been taken—without asking. Everyone stays in sync across your family.</p>
-          </article>
-
-        </div>
-      </div>
-    </section>
-
-    <section id="beta" class="beta">
-      <div class="container narrow">
-        <div class="beta-panel">
-          <div class="section-label">Early access</div>
-          <h2>Join the ScriptSchedule beta.</h2>
-          <p class="section-copy">
-            Be first to try the app and help shape a smarter way to manage family prescriptions.
-          </p>
-
-          <form class="beta-form" id="beta-form">
-            <input type="text" id="name" name="name" placeholder="First name" required />
-            <input type="email" id="email" name="email" placeholder="Email address" required />
-            <button type="submit" class="button">Request early access</button>
-          </form>
-
-          <p class="form-note">No spam. No payment. Just early access updates.</p>
-          <div class="success" id="success-message" aria-live="polite">
-            You’re on the list. We’ll be in touch soon.
-          </div>
-        
-          <article class="feature-card">
-            <div class="feature-number">04</div>
-            <h3>Shared Dashboard</h3>
-            <p>Know what’s been taken—without asking. Everyone stays in sync across your family.</p>
-          </article>
-
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer class="site-footer">
-    <div class="container footer-row">
-      <div>
-        <div class="brand footer-brand">
-          <span class="brand-script">Script</span><span class="brand-schedule">Schedule</span>
-        </div>
-        <p>Family prescription management, redesigned.</p>
-      </div>
-      <div class="footer-links">
-        <a href="#features">Features</a>
-        <a href="#family">Family</a>
-        <a href="#beta">Join Beta</a>
-      </div>
-    </div>
-  </footer>
-
-  <script src="app.js"></script>
 </body>
 </html>
