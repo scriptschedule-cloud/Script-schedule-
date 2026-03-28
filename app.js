@@ -1,26 +1,84 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const form = document.getElementById('beta-form');
-  const successMessage = document.getElementById('success-message');
+<!DOCTYPE html>
+<html>
+<head>
+<title>ScriptSchedule</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { font-family: Arial; background:#2C2420; color:#fff; padding:20px;}
+.card { background:#3a312c; padding:15px; border-radius:12px; margin-bottom:12px;}
+button { padding:10px 14px; border:none; border-radius:8px; margin-top:6px; cursor:pointer;}
+input { padding:8px; width:100%; margin-top:6px; border-radius:6px; border:none;}
+h2 { margin-bottom:10px;}
+</style>
+</head>
+<body>
 
-  if (form) {
-    form.addEventListener('submit', (event) => {
-      event.preventDefault();
+<h2>ScriptSchedule</h2>
 
-      const name = document.getElementById('name').value.trim();
-      const email = document.getElementById('email').value.trim();
+<div class="card">
+<h3>Add Family Member</h3>
+<input id="name" placeholder="Name"/>
+<button onclick="addMember()">Add</button>
+</div>
 
-      if (!name) {
-        alert('Please enter your first name.');
-        return;
-      }
+<div id="members"></div>
 
-      if (!email || !email.includes('@')) {
-        alert('Please enter a valid email address.');
-        return;
-      }
+<script>
+let data = JSON.parse(localStorage.getItem('scriptSchedule') || '[]');
 
-      successMessage.style.display = 'block';
-      form.reset();
+function save(){
+  localStorage.setItem('scriptSchedule', JSON.stringify(data));
+  render();
+}
+
+function addMember(){
+  const name = document.getElementById('name').value;
+  if(!name) return;
+  data.push({name, meds:[]});
+  document.getElementById('name').value='';
+  save();
+}
+
+function addMed(i){
+  const med = prompt("Medication name?");
+  if(!med) return;
+  data[i].meds.push({name:med, taken:false});
+  save();
+}
+
+function toggle(i,j){
+  data[i].meds[j].taken = !data[i].meds[j].taken;
+  save();
+}
+
+function render(){
+  const container = document.getElementById('members');
+  container.innerHTML='';
+
+  data.forEach((m,i)=>{
+    let div = document.createElement('div');
+    div.className='card';
+
+    div.innerHTML = `
+      <h3>${m.name}</h3>
+      <button onclick="addMed(${i})">Add Medication</button>
+    `;
+
+    m.meds.forEach((med,j)=>{
+      let medDiv = document.createElement('div');
+      medDiv.innerHTML = `
+        <p>${med.name} — ${med.taken ? "✅ Taken" : "❌ Not taken"}</p>
+        <button onclick="toggle(${i},${j})">Mark</button>
+      `;
+      div.appendChild(medDiv);
     });
-  }
-});
+
+    container.appendChild(div);
+  });
+}
+
+render();
+</script>
+
+</body>
+</html>
