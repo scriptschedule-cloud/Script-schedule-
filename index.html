@@ -4,35 +4,170 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ScriptSchedule</title>
   <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: Arial, sans-serif;
       background: #2C2420;
       color: white;
-      padding: 20px;
       margin: 0;
+      min-height: 100vh;
     }
-
-    h1 {
+    #onboarding {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .ob-logo { margin-bottom: 12px; }
+    .ob-title {
+      font-size: 26px;
+      color: #c9a66b;
+      font-weight: bold;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+    .ob-sub {
+      font-size: 12px;
+      color: #8a7050;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+    .ob-card {
+      background: rgba(58, 49, 44, 0.9);
+      border-radius: 18px;
+      padding: 24px 20px;
+      width: 100%;
+      max-width: 400px;
+    }
+    .ob-card-title {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .ob-card-hint {
+      font-size: 12px;
+      color: #8a7050;
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+    .ob-section-label {
+      font-size: 11px;
+      color: #8a7050;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .ob-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .ob-icon {
+      width: 36px;
+      height: 36px;
+      background: #1e1610;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .ob-input {
+      flex: 1;
+      background: #1e1610;
+      border: 1px solid #3a2e1e;
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: white;
+      font-size: 15px;
+      outline: none;
+    }
+    .ob-input:focus { border-color: #c9a66b; }
+    .ob-input::placeholder { color: #5a4a30; }
+    .ob-remove {
+      background: transparent;
+      border: 1px solid #3a2e1e;
+      border-radius: 8px;
+      color: #7a6a50;
+      width: 28px;
+      height: 28px;
+      font-size: 18px;
+      cursor: pointer;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .ob-add {
+      width: 100%;
+      padding: 9px;
+      background: transparent;
+      border: 1px dashed #3a2e1e;
+      border-radius: 10px;
+      color: #c9a66b;
+      font-size: 13px;
+      cursor: pointer;
+      margin-top: 2px;
+    }
+    .ob-divider {
+      height: 1px;
+      background: #3a2e1e;
+      margin: 18px 0;
+    }
+    .ob-continue {
+      width: 100%;
+      padding: 14px;
+      margin-top: 22px;
+      background: linear-gradient(135deg, #c9a66b, #a07840);
+      border: none;
+      border-radius: 12px;
+      color: #1e1610;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .ob-continue:disabled { opacity: 0.35; cursor: not-allowed; }
+    #app { display: none; padding: 20px; }
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       margin-bottom: 24px;
     }
-
+    .app-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .app-header h1 { color: #c9a66b; font-size: 22px; }
+    .edit-family-btn {
+      background: transparent;
+      border: 1px solid #3a2e1e;
+      border-radius: 8px;
+      color: #8a7050;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
     .card {
       background: rgba(58, 49, 44, 0.9);
       padding: 16px;
       border-radius: 14px;
       margin-bottom: 16px;
     }
-
     input {
       width: 100%;
       padding: 12px;
       border-radius: 10px;
       border: none;
       margin: 8px 0 12px;
-      box-sizing: border-box;
       font-size: 16px;
+      background: #1e1610;
+      color: white;
     }
-
     button {
       padding: 10px 16px;
       border: none;
@@ -40,7 +175,6 @@
       font-size: 16px;
       cursor: pointer;
     }
-
     .med-row {
       margin-top: 10px;
       padding-top: 10px;
@@ -49,43 +183,158 @@
   </style>
 </head>
 <body>
-  <h1>ScriptSchedule</h1>
 
-  <div class="card">
-    <h2>Add Family Member</h2>
-    <input id="name" placeholder="Name">
-    <button id="addBtn">Add</button>
+  <!-- ONBOARDING SCREEN -->
+  <div id="onboarding">
+    <div class="ob-logo">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="80" height="80">
+        <rect width="200" height="200" rx="40" fill="#2c1a0e"/>
+        <rect x="8" y="8" width="184" height="184" rx="34" fill="url(#g)"/>
+        <defs>
+          <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#3d2210"/>
+            <stop offset="100%" style="stop-color:#1a0d06"/>
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2.5" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <polyline points="44,60 44,44 60,44" fill="none" stroke="#6abfad" stroke-width="5" stroke-linecap="round"/>
+        <polyline points="140,44 156,44 156,60" fill="none" stroke="#6abfad" stroke-width="5" stroke-linecap="round"/>
+        <polyline points="44,140 44,156 60,156" fill="none" stroke="#6abfad" stroke-width="5" stroke-linecap="round"/>
+        <polyline points="156,140 156,156 140,156" fill="none" stroke="#6abfad" stroke-width="5" stroke-linecap="round"/>
+        <rect x="30" y="97" width="140" height="3" rx="1.5" fill="#4dff9a" opacity="0.85" filter="url(#glow)"/>
+        <text x="100" y="118" font-family="Georgia,serif" font-size="80" font-weight="bold" fill="#e8d5b0" text-anchor="middle">Rx</text>
+      </svg>
+    </div>
+    <div class="ob-title">ScriptSchedule</div>
+    <div class="ob-sub">Scan · Schedule · Remind</div>
+    <div class="ob-card">
+      <div class="ob-card-title">Set Up Your Family</div>
+      <div class="ob-card-hint">Enter the names of everyone you'll be tracking medications for. You can edit this anytime.</div>
+      <div class="ob-section-label">👨‍👩‍👧‍👦 People</div>
+      <div id="ob-people"></div>
+      <button class="ob-add" onclick="addObRow('people')">+ Add Person</button>
+      <div class="ob-divider"></div>
+      <div class="ob-section-label">🐾 Pets (optional)</div>
+      <div id="ob-pets"></div>
+      <button class="ob-add" onclick="addObRow('pets')">+ Add Pet</button>
+      <button class="ob-continue" id="ob-continue" onclick="finishOnboarding()" disabled>
+        Continue to App →
+      </button>
+    </div>
   </div>
 
-  <div id="members"></div>
+  <!-- MAIN APP -->
+  <div id="app">
+    <div class="app-header">
+      <div class="app-header-left">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="36" height="36">
+          <rect width="200" height="200" rx="40" fill="#2c1a0e"/>
+          <rect x="8" y="8" width="184" height="184" rx="34" fill="url(#g2)"/>
+          <defs>
+            <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#3d2210"/>
+              <stop offset="100%" style="stop-color:#1a0d06"/>
+            </linearGradient>
+            <filter id="glow2">
+              <feGaussianBlur stdDeviation="2.5" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <polyline points="44,60 44,44 60,44" fill="none" stroke="#6abfad" stroke-width="5" stroke-linecap="round"/>
+          <polyline points="140,44 156,44 156,60" fill="none" stroke="#6abfad" stroke-width="5" stroke-linecap="round"/>
+          <polyline points="44,140 44,156 60,156" fill="none" stroke="#6abfad" stroke-width="5" stroke-linecap="round"/>
+          <polyline points="156,140 156,156 140,156" fill="none" stroke="#6abfad" stroke-width="5" stroke-linecap="round"/>
+          <rect x="30" y="97" width="140" height="3" rx="1.5" fill="#4dff9a" opacity="0.85" filter="url(#glow2)"/>
+          <text x="100" y="118" font-family="Georgia,serif" font-size="80" font-weight="bold" fill="#e8d5b0" text-anchor="middle">Rx</text>
+        </svg>
+        <h1>ScriptSchedule</h1>
+      </div>
+      <button class="edit-family-btn" onclick="resetOnboarding()">⚙ Edit Family</button>
+    </div>
+    <div id="members"></div>
+  </div>
 
   <script>
-    let data = JSON.parse(localStorage.getItem('scriptSchedule') || '[]');
+    const STORAGE_KEY = 'scriptSchedule';
+    let data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    let obPeople = [{ name: '' }, { name: '' }];
+    let obPets   = [{ name: '' }];
 
-    function save() {
-      localStorage.setItem('scriptSchedule', JSON.stringify(data));
+    function renderObRows(type) {
+      const arr = type === 'people' ? obPeople : obPets;
+      const container = document.getElementById('ob-' + type);
+      container.innerHTML = '';
+      arr.forEach((item, i) => {
+        const row = document.createElement('div');
+        row.className = 'ob-row';
+        row.innerHTML = `
+          <div class="ob-icon">${type === 'people' ? '👤' : '🐾'}</div>
+          <input class="ob-input" placeholder="${type === 'people' ? 'Person' : 'Pet'} ${i + 1} name"
+            value="${item.name}"
+            oninput="updateObRow('${type}', ${i}, this.value)" />
+          ${arr.length > 1 ? `<button class="ob-remove" onclick="removeObRow('${type}', ${i})">×</button>` : ''}
+        `;
+        container.appendChild(row);
+      });
+      checkObContinue();
+    }
+
+    function addObRow(type) {
+      if (type === 'people') obPeople.push({ name: '' });
+      else obPets.push({ name: '' });
+      renderObRows(type);
+    }
+
+    function removeObRow(type, i) {
+      if (type === 'people') obPeople.splice(i, 1);
+      else obPets.splice(i, 1);
+      renderObRows(type);
+    }
+
+    function updateObRow(type, i, val) {
+      if (type === 'people') obPeople[i].name = val;
+      else obPets[i].name = val;
+      checkObContinue();
+    }
+
+    function checkObContinue() {
+      const hasName = [...obPeople, ...obPets].some(m => m.name.trim());
+      document.getElementById('ob-continue').disabled = !hasName;
+    }
+
+    function finishOnboarding() {
+      const allNames = [
+        ...obPeople.filter(p => p.name.trim()),
+        ...obPets.filter(p => p.name.trim())
+      ];
+      data = allNames.map(m => ({ name: m.name.trim(), meds: [] }));
+      save();
+      showApp();
+    }
+
+    function resetOnboarding() {
+      document.getElementById('onboarding').style.display = 'flex';
+      document.getElementById('app').style.display = 'none';
+    }
+
+    function showApp() {
+      document.getElementById('onboarding').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
       render();
     }
 
-    function addMember() {
-      const input = document.getElementById('name');
-      const name = input.value.trim();
-      if (!name) return;
-
-      data.push({ name: name, meds: [] });
-      input.value = '';
-      save();
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      render();
     }
 
     function addMed(i) {
       const med = prompt('Medication name?');
       if (!med || !med.trim()) return;
-
-      data[i].meds.push({
-        name: med.trim(),
-        taken: false
-      });
-
+      data[i].meds.push({ name: med.trim(), taken: false });
       save();
     }
 
@@ -97,42 +346,35 @@
     function render() {
       const container = document.getElementById('members');
       container.innerHTML = '';
-
       data.forEach((person, i) => {
         const div = document.createElement('div');
         div.className = 'card';
-
         const title = document.createElement('h3');
         title.textContent = person.name;
         div.appendChild(title);
-
         const addMedBtn = document.createElement('button');
         addMedBtn.textContent = 'Add Medication';
         addMedBtn.onclick = function () { addMed(i); };
         div.appendChild(addMedBtn);
-
         person.meds.forEach((med, j) => {
           const medDiv = document.createElement('div');
           medDiv.className = 'med-row';
-
           const p = document.createElement('p');
           p.textContent = med.name + ' — ' + (med.taken ? '✅ Taken' : '❌ Not taken');
           medDiv.appendChild(p);
-
           const markBtn = document.createElement('button');
           markBtn.textContent = 'Mark';
           markBtn.onclick = function () { toggle(i, j); };
           medDiv.appendChild(markBtn);
-
           div.appendChild(medDiv);
         });
-
         container.appendChild(div);
       });
     }
 
-    document.getElementById('addBtn').addEventListener('click', addMember);
-    render();
+    renderObRows('people');
+    renderObRows('pets');
+    if (data.length > 0) showApp();
   </script>
 </body>
 </html>
