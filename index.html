@@ -26,86 +26,86 @@ html,body{background:#1e1610;color:#f0e6d8;font-family:Georgia,'Times New Roman'
 .ib-icon{width:50px;height:50px;border-radius:13px;overflow:hidden;flex-shrink:0;box-shadow:0 4px 16px rgba(201,166,107,.3)}
 .ib-icon img{width:100%;height:100%;object-fit:cover}
 .ib-words h3{font-size:16px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;line-height:1.3}
-.ib-words p{font-size:12px;color:#a0896e;margin-top:3px;font-family:Georgia,serif}
+.ib-words p{font-size:14px;color:#a0896e;margin-top:3px;font-family:Georgia,serif}
 .ib-close{position:absolute;top:12px;right:12px;background:none;border:none;color:#a0896e;font-size:24px;cursor:pointer;padding:6px;line-height:1}
 #btn-install{width:100%;background:#c9a66b;color:#1a1008;border:none;border-radius:13px;padding:15px;font-size:15px;font-weight:700;font-family:Georgia,serif;cursor:pointer;letter-spacing:.02em}
 #btn-install:active{background:#b8954f;transform:scale(.98)}
 #ios-steps{display:none;flex-direction:column;gap:9px}
 .ios-step{display:flex;align-items:center;gap:12px;background:#1e1610;border:1px solid #3d2e1a;border-radius:11px;padding:12px 14px}
-.snum{width:24px;height:24px;background:#c9a66b;color:#1a1008;border-radius:50%;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.snum{width:24px;height:24px;background:#c9a66b;color:#1a1008;border-radius:50%;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .sico{font-size:20px;flex-shrink:0}
-.stxt{font-size:13px;color:#f0e6d8;font-family:Georgia,serif;line-height:1.4}
+.stxt{font-size:15px;color:#f0e6d8;font-family:Georgia,serif;line-height:1.4}
 .stxt b{color:#c9a66b}
 
 /* LAYOUT */
-.app{max-width:480px;margin:0 auto;min-height:100vh;position:relative}
+.app{max-width:100%;margin:0;min-height:100vh;position:relative}
 header{background:linear-gradient(135deg,#1a1008,#2a1f14);border-bottom:1px solid #3a2e24;position:sticky;top:0;z-index:50}
-.header-inner{display:flex;align-items:center;justify-content:space-between;padding:14px 18px}
-.logo-area{display:flex;align-items:center;gap:10px}
-.logo-img{width:42px;height:42px;border-radius:10px;object-fit:cover}
-.logo-text{font-size:18px;font-weight:700;letter-spacing:-0.02em;color:#f0e6d8}
-.logo-sub{font-size:10px;color:#c9a66b;letter-spacing:.12em;text-transform:uppercase}
-.header-date{font-size:13px;color:#a08a7a;font-style:italic}
+.header-inner{display:flex;align-items:center;justify-content:space-between;padding:22px 24px;}
+.logo-area{display:flex;align-items:center;gap:14px}
+.logo-img{width:58px;height:58px;border-radius:14px;object-fit:cover}
+.logo-text{font-size:22px;font-weight:700;letter-spacing:-0.02em;color:#f0e6d8;line-height:1;margin-bottom:6px;}
+.logo-sub{font-size:14px;color:#c9a66b;letter-spacing:.12em;text-transform:uppercase}
+.header-date{font-size:15px;color:#a08a7a;font-style:italic}
 
 /* PEOPLE BAR */
-.people-section{background:#1a1208;border-bottom:1px solid #2a2018}
-.people-bar{display:flex;gap:6px 8px;padding:8px 14px;flex-wrap:wrap;align-items:center;}
+.people-section{background:#1a1208;border-bottom:1px solid #2a2018;padding:4px 0;}
+.people-bar{display:flex;gap:6px 8px;padding:8px 14px;flex-wrap:nowrap;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .people-bar::-webkit-scrollbar{display:none}
 .person-wrap{position:relative;display:flex;align-items:center;flex-shrink:0}
-.person-btn{display:flex;align-items:center;gap:6px;border:1px solid #3a2e24;border-radius:20px;padding:6px 14px;background:transparent;color:#d9c7b9;cursor:pointer;white-space:nowrap;font-size:13px;font-family:Georgia,serif}
+.person-btn{display:flex;align-items:center;gap:6px;border:1px solid #3a2e24;border-radius:20px;padding:6px 14px;background:transparent;color:#d9c7b9;cursor:pointer;white-space:nowrap;font-size:15px;font-family:Georgia,serif}
 .person-btn.active{font-weight:700}
-.avatar{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#1a1008;flex-shrink:0}
-.remove-btn{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#5a2a1a;color:#e8a090;border:none;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
-.add-person-btn{border:1px dashed #5a4a43;border-radius:20px;padding:6px 12px;background:transparent;color:#8a7a70;cursor:pointer;white-space:nowrap;font-size:13px;font-family:Georgia,serif;flex-shrink:0}
+.avatar{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#1a1008;flex-shrink:0}
+.remove-btn{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#5a2a1a;color:#e8a090;border:none;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
+.add-person-btn{border:1px dashed #5a4a43;border-radius:20px;padding:6px 12px;background:transparent;color:#8a7a70;cursor:pointer;white-space:nowrap;font-size:15px;font-family:Georgia,serif;flex-shrink:0}
 .add-person-input{display:flex;align-items:center;gap:4px;flex-shrink:0}
-.person-name-input{padding:5px 10px;border-radius:20px;border:1px solid #c9a66b;background:#1e1610;color:#f0e6d8;font-size:13px;width:90px;outline:none;font-family:Georgia,serif}
-.confirm-btn{background:#4a7c59;color:#fff;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px}
-.cancel-btn{background:#5a2a1a;color:#e8a090;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px}
+.person-name-input{padding:5px 10px;border-radius:20px;border:1px solid #c9a66b;background:#1e1610;color:#f0e6d8;font-size:15px;width:90px;outline:none;font-family:Georgia,serif}
+.confirm-btn{background:#4a7c59;color:#fff;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:15px}
+.cancel-btn{background:#5a2a1a;color:#e8a090;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:15px}
 
 /* NAV */
-nav{display:flex;border-bottom:1px solid #2a2018;background:#1a1208;overflow-x:auto;scrollbar-width:none}
-nav::-webkit-scrollbar{display:none}
-.nav-btn{flex:1;min-width:56px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 4px;background:transparent;border:none;color:#8a7a70;cursor:pointer;font-size:10px;font-family:Georgia,serif;white-space:nowrap}
-.nav-btn.active{color:#c9a66b;border-bottom:2px solid #c9a66b}
-.nav-icon{font-size:16px}
+nav{display:flex;border-top:1px solid #2a2018;background:#1a1208;position:fixed;bottom:0;left:0;right:0;z-index:50;overflow-x:auto;scrollbar-width:none;}
+
+.nav-btn{flex:1;min-width:56px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 4px;background:transparent;border:none;color:#8a7a70;cursor:pointer;font-size:14px;font-family:Georgia,serif;white-space:nowrap}
+.nav-btn.active{color:#c9a66b;border-top:2px solid #c9a66b;}
+.nav-icon{font-size:18px}
 
 /* MAIN */
 main{padding:14px 14px 80px;animation:fadeIn .3s ease}
 
 /* CARDS */
-.stat-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
-.stat-card{background:#261e16;border:1px solid;border-radius:14px;padding:14px 10px;text-align:center}
-.stat-num{font-size:28px;font-weight:700;color:#c9a66b}
-.stat-label{font-size:11px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+.stat-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+.stat-card{background:#261e16;border:1px solid;border-radius:14px;padding:12px 8px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.stat-num{font-size:24px;font-weight:700;color:#c9a66b;line-height:1;}
+.stat-label{font-size:11px;color:#8a7a70;text-transform:uppercase;letter-spacing:.05em;margin-top:4px;}
 .progress-card{background:#261e16;border-radius:14px;padding:14px;margin-bottom:14px}
-.progress-label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;color:#d9c7b9}
-.progress-track{height:8px;background:#3a2e24;border-radius:4px;overflow:hidden}
+.progress-label{display:flex;justify-content:space-between;font-size:15px;margin-bottom:8px;color:#d9c7b9}
+.progress-track{height:14px;background:#3a2e24;border-radius:7px;overflow:hidden}
 .progress-fill{height:100%;background:linear-gradient(90deg,#c9a66b,#e8c87a);border-radius:4px;transition:width .6s ease}
-.section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.add-btn{background:#c9a66b;color:#1a1008;border:none;border-radius:20px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:13px;font-family:Georgia,serif}
+.section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding:4px 0;}
+.add-btn{background:#c9a66b;color:#1a1008;border:none;border-radius:20px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:15px;font-family:Georgia,serif}
 .back-btn{background:transparent;border:none;color:#c9a66b;cursor:pointer;font-size:14px;padding:0;font-family:Georgia,serif}
 .empty-state{text-align:center;padding:30px 20px;color:#8a7a70;font-size:15px}
 
 /* MED CARD */
-.med-card{background:#261e16;border-radius:14px;padding:14px;margin-bottom:10px;border-left:3px solid;transition:opacity .3s}
+.med-card{background:#261e16;border-radius:14px;padding:18px;margin-bottom:14px;border-left:4px solid;transition:opacity .3s}
 .med-card.taken{opacity:.65}
 .med-card-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px}
 .med-dot{width:10px;height:10px;border-radius:50%;margin-top:5px;flex-shrink:0}
 .med-name{font-size:16px;font-weight:700;color:#f0e6d8}
-.med-meta{font-size:13px;color:#a08a7a;margin-top:2px}
-.med-notes{font-size:12px;color:#8a7a70;margin-top:4px;font-style:italic}
-.person-tag{font-size:11px;padding:3px 8px;border-radius:10px;font-weight:600;flex-shrink:0}
-.med-next-due{font-size:12px;color:#8a7a70;margin-bottom:10px;display:flex;align-items:center;gap:8px}
-.taken-badge{background:#2a4a34;color:#8cc49a;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
-.med-btns{display:flex;gap:8px}
-.btn-take{flex:1;background:#c9a66b;color:#1a1008;border:none;border-radius:10px;padding:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:Georgia,serif}
-.btn-edit{flex:1;background:#3a2e24;color:#d9c7b9;border:none;border-radius:10px;padding:8px;cursor:pointer;font-size:13px;font-family:Georgia,serif}
-.btn-delete{flex:1;background:#3a1a14;color:#e8a090;border:none;border-radius:10px;padding:8px;cursor:pointer;font-size:13px;font-family:Georgia,serif}
+.med-meta{font-size:15px;color:#a08a7a;margin-top:2px}
+.med-notes{font-size:14px;color:#8a7a70;margin-top:4px;font-style:italic}
+.person-tag{font-size:15px;padding:3px 8px;border-radius:10px;font-weight:600;flex-shrink:0}
+.med-next-due{font-size:14px;color:#8a7a70;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.taken-badge{background:#2a4a34;color:#8cc49a;font-size:15px;padding:2px 8px;border-radius:10px;font-weight:600}
+.med-btns{display:flex;flex-direction:column;gap:8px}
+.btn-take{flex:1;background:#c9a66b;color:#1a1008;border:none;border-radius:10px;padding:8px;font-weight:700;cursor:pointer;font-size:15px;font-family:Georgia,serif}
+.btn-edit{flex:1;background:#3a2e24;color:#d9c7b9;border:none;border-radius:10px;padding:8px;cursor:pointer;font-size:15px;font-family:Georgia,serif}
+.btn-delete{flex:1;background:#3a1a14;color:#e8a090;border:none;border-radius:10px;padding:8px;cursor:pointer;font-size:15px;font-family:Georgia,serif}
 
 /* FORM */
 .form-card{background:#261e16;border-radius:16px;padding:16px}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
-.form-label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:#a08a7a;letter-spacing:.05em;text-transform:uppercase}
+.form-label{display:flex;flex-direction:column;gap:5px;font-size:14px;color:#a08a7a;letter-spacing:.05em;text-transform:uppercase}
 .form-label.full{grid-column:1/-1}
 .form-input{padding:10px 12px;border-radius:10px;border:1px solid #3a2e24;background:#1e1610;color:#f0e6d8;font-size:14px;font-family:Georgia,serif;width:100%}
 .form-input:focus{outline:1px solid #c9a66b}
@@ -118,38 +118,38 @@ textarea.form-input{min-height:72px;resize:vertical}
 .scan-frame.active{border-color:#c9a66b}
 .scan-placeholder{text-align:center;color:#d9c7b9;font-size:14px}
 .scan-placeholder .icon{font-size:44px;margin-bottom:8px}
-.scan-overlay{position:absolute;inset:0;background:rgba(26,16,8,.75);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#c9a66b;font-size:13px;font-weight:600}
+.scan-overlay{position:absolute;inset:0;background:rgba(26,16,8,.75);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#c9a66b;font-size:15px;font-weight:600}
 .scan-img{width:100%;height:100%;object-fit:cover;border-radius:12px}
 .scan-btn-row{display:flex;gap:10px;margin-bottom:12px}
 .scan-btn{flex:1;background:#3a2e24;color:#d9c7b9;border:1px solid #4a3e34;border-radius:12px;padding:13px;font-size:14px;cursor:pointer;font-family:Georgia,serif;text-align:center;display:block}
 .scan-btn.secondary{background:#2a2018}
 .scan-result-card{background:#1a1208;border-radius:14px;padding:14px;margin-top:12px;border:1px solid #3a4e38}
 .scan-result-title{color:#8cc49a;font-weight:700;font-size:14px;margin-bottom:10px}
-.scan-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2a2018;font-size:13px}
-.scan-key{color:#8a7a70;text-transform:uppercase;font-size:11px;letter-spacing:.05em}
+.scan-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2a2018;font-size:15px}
+.scan-key{color:#8a7a70;text-transform:uppercase;font-size:15px;letter-spacing:.05em}
 .scan-val{color:#f0e6d8;font-weight:600}
-.hint-text{color:#5a4a43;font-size:11px;text-align:center;margin-top:8px;line-height:1.6}
-.error-box{background:#3a1a14;border:1px solid #8a4b3a;border-radius:12px;padding:12px;color:#e8a090;font-size:13px;margin-bottom:12px;line-height:1.6}
+.hint-text{color:#5a4a43;font-size:15px;text-align:center;margin-top:8px;line-height:1.6}
+.error-box{background:#3a1a14;border:1px solid #8a4b3a;border-radius:12px;padding:12px;color:#e8a090;font-size:15px;margin-bottom:12px;line-height:1.6}
 
 /* PILL ID */
 .tab-switch{display:flex;background:#261e16;border-radius:12px;padding:4px;margin-bottom:16px}
-.tab-btn{flex:1;padding:8px;border-radius:9px;border:none;cursor:pointer;font-size:13px;font-family:Georgia,serif;transition:all .2s}
+.tab-btn{flex:1;padding:8px;border-radius:9px;border:none;cursor:pointer;font-size:15px;font-family:Georgia,serif;transition:all .2s}
 .tab-btn.active{background:#c9a66b;color:#1a1008;font-weight:700}
 .tab-btn:not(.active){background:transparent;color:#8a7a70}
 .pill-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
 .pill-stat{background:#1e1610;border-radius:10px;padding:8px 10px}
-.pill-stat-label{font-size:10px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
-.pill-stat-val{font-size:13px;font-weight:600;color:#f0e6d8}
-.tag{font-size:12px;padding:4px 10px;border-radius:20px;background:#2a2018;color:#d9c7b9;border:1px solid #3a3020}
-.allergy-tag{font-size:12px;padding:4px 10px;border-radius:20px;background:#4a1a14;color:#e8908a;border:1px solid #7a2a20}
-.diagnosis-tag{font-size:12px;padding:4px 10px;border-radius:20px;background:#2a3a4a;color:#8fa8c8;border:1px solid #3a4a5a}
+.pill-stat-label{font-size:14px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.pill-stat-val{font-size:15px;font-weight:600;color:#f0e6d8}
+.tag{font-size:14px;padding:4px 10px;border-radius:20px;background:#2a2018;color:#d9c7b9;border:1px solid #3a3020}
+.allergy-tag{font-size:14px;padding:4px 10px;border-radius:20px;background:#4a1a14;color:#e8908a;border:1px solid #7a2a20}
+.diagnosis-tag{font-size:14px;padding:4px 10px;border-radius:20px;background:#2a3a4a;color:#8fa8c8;border:1px solid #3a4a5a}
 .ix-row{padding:10px 0;border-bottom:1px solid #2a2018}
-.severity-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;text-transform:uppercase}
+.severity-badge{font-size:15px;font-weight:700;padding:2px 8px;border-radius:8px;text-transform:uppercase}
 
 /* EMERGENCY */
 .emergency-header{background:linear-gradient(135deg,#7a1010,#b02020);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .emergency-card{background:#261e16;border-radius:14px;padding:14px;margin-bottom:10px}
-.section-title-sm{font-size:12px;font-weight:700;color:#c9a66b;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px}
+.section-title-sm{font-size:14px;font-weight:700;color:#c9a66b;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px}
 .emergency-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
 .emergency-stat{background:#1e1610;border-radius:10px;padding:10px 12px}
 .emergency-med-row{display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:1px solid #2a2018}
@@ -157,20 +157,20 @@ textarea.form-input{min-height:72px;resize:vertical}
 /* REPORT */
 .report-header{background:linear-gradient(135deg,#1a1008,#2a1f14);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;border:1px solid #3a2e24}
 .range-btns{display:flex;gap:8px;margin-bottom:14px}
-.range-btn{flex:1;padding:8px;border-radius:10px;border:1px solid #3a2e24;background:transparent;color:#d9c7b9;cursor:pointer;font-size:13px;font-family:Georgia,serif}
+.range-btn{flex:1;padding:8px;border-radius:10px;border:1px solid #3a2e24;background:transparent;color:#d9c7b9;cursor:pointer;font-size:15px;font-family:Georgia,serif}
 .range-btn.active{background:#c9a66b;color:#1a1008;font-weight:700}
 
 /* DOCS */
 .doc-upload-area{margin-bottom:14px}
-.doc-upload-label{font-size:11px;color:#8a7a70;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
+.doc-upload-label{font-size:15px;color:#8a7a70;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
 .doc-upload-row{display:flex;gap:8px}
-.doc-upload-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:#261e16;border:1px solid #3a2e24;border-radius:12px;padding:12px 8px;color:#d9c7b9;text-align:center;cursor:pointer;font-family:Georgia,serif;font-size:12px}
+.doc-upload-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:#261e16;border:1px solid #3a2e24;border-radius:12px;padding:12px 8px;color:#d9c7b9;text-align:center;cursor:pointer;font-family:Georgia,serif;font-size:14px}
 .doc-upload-btn.primary{flex:2;background:linear-gradient(135deg,#c9a66b,#e8c87a);color:#1a1008;font-weight:700}
 .doc-upload-btn .icon{font-size:20px}
 .doc-card{width:100%;background:#261e16;border-radius:14px;padding:14px;margin-bottom:10px;border-left:3px solid;cursor:pointer;border-top:none;border-right:none;border-bottom:none;text-align:left;display:block}
 .doc-icon{font-size:22px;width:36px;height:36px;background:#1e1610;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.doc-type-badge{font-size:11px;padding:3px 8px;border-radius:10px;background:#3a2e24;color:#c9a66b;font-weight:600}
-.lab-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2a2018;font-size:13px}
+.doc-type-badge{font-size:15px;padding:3px 8px;border-radius:10px;background:#3a2e24;color:#c9a66b;font-weight:600}
+.lab-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2a2018;font-size:15px}
 .lab-label{color:#a08a7a}
 .lab-value{font-weight:700}
 .flag-high{color:#e8a090}
@@ -180,22 +180,22 @@ textarea.form-input{min-height:72px;resize:vertical}
 /* LOADING */
 #loading{position:fixed;inset:0;background:#1e1610;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:9999}
 #loading img{width:64px;height:64px;border-radius:16px}
-#loading p{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:#c9a66b;opacity:.8}
+#loading p{font-size:14px;letter-spacing:.15em;text-transform:uppercase;color:#c9a66b;opacity:.8}
 
 /* TOAST */
 .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);padding:10px 22px;border-radius:20px;color:#fff;font-size:14px;font-weight:600;z-index:999;box-shadow:0 4px 24px rgba(0,0,0,.4);animation:slideDown .3s ease;white-space:nowrap}
 
 /* WEEKLY STRIP */
-.week-strip{display:flex;justify-content:space-around;padding:10px 14px;background:#1e1610;border-bottom:1px solid #2a2018}
-.day-pill{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 8px;border-radius:10px}
+.week-strip{display:flex;justify-content:space-around;padding:10px 14px;background:#1e1610;border-bottom:1px solid #2a2018;overflow-x:auto;scrollbar-width:none;}
+.day-pill{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 8px;border-radius:10px;flex-shrink:0;min-width:38px;}
 .day-pill.today{background:#3a2e24}
-.day-name{font-size:10px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em}
-.day-num{font-size:16px;font-weight:600;color:#f0e6d8}
+.day-name{font-size:14px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em}
+.day-num{font-size:19px;font-weight:600;color:#f0e6d8}
 
 /* SCHEDULE */
 .schedule-day{background:#261e16;border-radius:14px;padding:14px;margin-bottom:10px;border-left:3px solid #3a2e24}
 .schedule-day-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px}
-.today-badge{background:#c9a66b22;color:#c9a66b;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.today-badge{background:#c9a66b22;color:#c9a66b;font-size:14px;padding:2px 8px;border-radius:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
 .schedule-med-row{display:flex;align-items:center;gap:10px;padding:6px 0}
 
 @media(max-width:480px){
@@ -268,6 +268,11 @@ let state = {
 };
 
 // ── STORAGE ──────────────────────────────────────────────────────────────────
+function resetApp() {
+  if (!confirm("Clear everything? This removes all names and data.")) return;
+  localStorage.clear();
+  location.reload();
+}
 function save(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
 }
@@ -486,7 +491,7 @@ ${toastHTML}
   </div>
   <div class="people-bar" style="flex-wrap:nowrap;overflow-x:auto;gap:8px;padding:4px 14px 8px;border-top:1px solid #2a2018">
     <button class="person-btn ${state.selectedPerson==="All"?"active":""}" style="${state.selectedPerson==="All"?`background:#c9a66b;color:#1a1008`:""}" data-action="selectPerson" data-person="All">All</button>
-    <span style="font-size:11px;color:#5a4a43">🐾</span>
+    <span style="font-size:15px;color:#5a4a43">🐾</span>
     ${state.pets.map(p=>`
       <div class="person-wrap">
         <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="selectPerson" data-person="${p}">
@@ -515,7 +520,7 @@ ${toastHTML}
     <button class="nav-btn ${state.view===v?"active":""}" data-action="setView" data-view="${v}">
       <span class="nav-icon">${icon}</span><span>${label}</span>
     </button>`).join("")}
-</nav>
+<button class="nav-btn" onclick="resetApp()"><span class="nav-icon">⟳</span><span>Clear</span></button></nav>
 
 <main>${buildView(filtered, taken, pending, pct, weekDays)}</main>`;
 }
@@ -639,7 +644,7 @@ function buildScan() {
       <div class="scan-result-title">✓ Label Read Successfully</div>
       ${[["Medication",state.scanResult.name],["Dose",state.scanResult.dose],["Directions",state.scanResult.directions],["Prescriber",state.scanResult.prescriber],["Pharmacy",state.scanResult.pharmacy],["Refills",state.scanResult.refills],["Patient",state.scanResult.patient]].filter(([,v])=>v&&v!=="Not found").map(([k,v])=>`<div class="scan-row"><span class="scan-key">${k}</span><span class="scan-val">${v}</span></div>`).join("")}
       <button class="submit-btn" data-action="addFromScan" style="margin-top:14px">+ Add to My Medications</button>
-      <button class="scan-btn" style="margin-top:8px;font-size:13px" data-action="clearScan">Scan Another</button>
+      <button class="scan-btn" style="margin-top:8px;font-size:15px" data-action="clearScan">Scan Another</button>
     </div>`:""}
   <div class="hint-text">Claude AI reads your label automatically. Works best with clear, well-lit photos.</div>
 </div>`;
@@ -666,7 +671,7 @@ ${state.pillTab==="photo"?`
 </div>`:``}
 ${state.pillTab==="imprint"?`
 <div class="scan-card">
-  <div style="font-size:13px;color:#d9c7b9;margin-bottom:12px;line-height:1.6">The imprint is the code stamped on the pill. Look for codes like <span style="color:#c9a66b;font-weight:600">L484</span>, <span style="color:#c9a66b;font-weight:600">M365</span>, or <span style="color:#c9a66b;font-weight:600">PLIVA 433</span>.</div>
+  <div style="font-size:15px;color:#d9c7b9;margin-bottom:12px;line-height:1.6">The imprint is the code stamped on the pill. Look for codes like <span style="color:#c9a66b;font-weight:600">L484</span>, <span style="color:#c9a66b;font-weight:600">M365</span>, or <span style="color:#c9a66b;font-weight:600">PLIVA 433</span>.</div>
   <label class="form-label">Imprint Code
     <input class="form-input" id="pillImprintInput" value="${state.pillImprint}" placeholder="e.g. L484" style="font-size:18px;letter-spacing:.1em;text-transform:uppercase"/>
   </label>
@@ -687,21 +692,21 @@ function buildPillResult() {
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
       <div>
         <div style="font-size:20px;font-weight:700;color:#f0e6d8">${r.name}</div>
-        ${r.brandName?`<div style="font-size:13px;color:#c9a66b;margin-top:2px">Brand: ${r.brandName}</div>`:""}
+        ${r.brandName?`<div style="font-size:15px;color:#c9a66b;margin-top:2px">Brand: ${r.brandName}</div>`:""}
       </div>
       <span class="doc-type-badge" style="background:${r.confidence==="high"?"#2a4a34":"#3a3010"};color:${r.confidence==="high"?"#8cc49a":"#c9a66b"}">${r.confidence==="high"?"✓ High":r.confidence==="medium"?"~ Medium":"? Low"}</span>
     </div>
     <div class="pill-grid">
       ${[["Strength",r.strength],["Shape",r.shape],["Color",r.color],["Imprint",r.imprint],["Category",r.category]].filter(([,v])=>v).map(([k,v])=>`<div class="pill-stat"><div class="pill-stat-label">${k}</div><div class="pill-stat-val">${v}</div></div>`).join("")}
     </div>
-    <div style="margin-top:10px;font-size:13px;color:#d9c7b9;line-height:1.7"><span style="color:#c9a66b;font-weight:600">Used for: </span>${r.usedFor}</div>
-    ${r.howItWorks?`<div style="margin-top:6px;font-size:12px;color:#8a7a70;font-style:italic">${r.howItWorks}</div>`:""}
+    <div style="margin-top:10px;font-size:15px;color:#d9c7b9;line-height:1.7"><span style="color:#c9a66b;font-weight:600">Used for: </span>${r.usedFor}</div>
+    ${r.howItWorks?`<div style="margin-top:6px;font-size:14px;color:#8a7a70;font-style:italic">${r.howItWorks}</div>`:""}
   </div>
   ${r.commonSideEffects?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">⚠️ Common Side Effects</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${r.commonSideEffects.map(s=>`<span class="tag">${s}</span>`).join("")}</div></div>`:""}
-  ${r.seriousWarnings?.length?`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #c04040"><div class="section-title-sm" style="color:#e8a090">🚨 Serious Warnings</div>${r.seriousWarnings.map(w=>`<div style="font-size:13px;color:#e8c0b0;padding:5px 0;border-bottom:1px solid #2a2018">• ${w}</div>`).join("")}</div>`:""}
-  ${r.interactions?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">⚡ Interactions with Your Meds</div>${r.interactions.map(ix=>`<div class="ix-row"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-weight:600;font-size:14px">${ix.drug}</span><span class="severity-badge" style="background:${sevColor[ix.severity]||"#8cc49a"}22;color:${sevColor[ix.severity]||"#8cc49a"}">${ix.severity}</span></div><div style="font-size:12px;color:#a08a7a">${ix.description}</div></div>`).join("")}</div>`:`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #8cc49a"><div style="font-size:13px;color:#8cc49a">✓ No known interactions with your current medications.</div></div>`}
+  ${r.seriousWarnings?.length?`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #c04040"><div class="section-title-sm" style="color:#e8a090">🚨 Serious Warnings</div>${r.seriousWarnings.map(w=>`<div style="font-size:15px;color:#e8c0b0;padding:5px 0;border-bottom:1px solid #2a2018">• ${w}</div>`).join("")}</div>`:""}
+  ${r.interactions?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">⚡ Interactions with Your Meds</div>${r.interactions.map(ix=>`<div class="ix-row"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-weight:600;font-size:14px">${ix.drug}</span><span class="severity-badge" style="background:${sevColor[ix.severity]||"#8cc49a"}22;color:${sevColor[ix.severity]||"#8cc49a"}">${ix.severity}</span></div><div style="font-size:14px;color:#a08a7a">${ix.description}</div></div>`).join("")}</div>`:`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #8cc49a"><div style="font-size:15px;color:#8cc49a">✓ No known interactions with your current medications.</div></div>`}
   <button class="submit-btn" data-action="addPillToMeds">+ Add to My Medications</button>
-  <button class="scan-btn" style="margin-top:8px;font-size:13px" data-action="clearPill">Identify Another</button>
+  <button class="scan-btn" style="margin-top:8px;font-size:15px" data-action="clearPill">Identify Another</button>
   <div class="hint-text" style="margin-top:10px">⚕️ For informational purposes only. Confirm with your pharmacist or doctor.</div>
 </div>`;
 }
@@ -715,7 +720,7 @@ function buildDocs() {
     return `
 <div class="section-header">
   <button class="back-btn" data-action="clearDocViewing">← Back</button>
-  <span style="font-size:13px">${doc.title}</span>
+  <span style="font-size:15px">${doc.title}</span>
 </div>
 <div class="form-card" style="margin-bottom:12px;border-left:3px solid ${getColor(doc.person)}">
   <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -727,14 +732,14 @@ function buildDocs() {
         <span class="doc-type-badge" style="background:#261e16">📎 ${doc.fileSize}</span>
       </div>
     </div>
-    <button class="btn-delete" style="flex:none;padding:6px 12px;font-size:12px;border-radius:10px" data-action="deleteDoc" data-id="${doc.id}">Remove</button>
+    <button class="btn-delete" style="flex:none;padding:6px 12px;font-size:14px;border-radius:10px" data-action="deleteDoc" data-id="${doc.id}">Remove</button>
   </div>
-  <div style="font-size:13px;color:#d9c7b9;margin-top:10px;line-height:1.7;font-style:italic">${doc.summary}</div>
+  <div style="font-size:15px;color:#d9c7b9;margin-top:10px;line-height:1.7;font-style:italic">${doc.summary}</div>
 </div>
 ${doc.keyValues?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">🔬 Key Values</div>${doc.keyValues.map(kv=>`<div class="lab-row"><span class="lab-label">${kv.label}</span><span class="lab-value ${kv.flag&&kv.flag!=="normal"?"flag-"+kv.flag:""}">${kv.value}${kv.flag==="high"?" ↑":kv.flag==="low"?" ↓":""}</span></div>`).join("")}</div>`:""}
 ${doc.diagnoses?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">🏥 Diagnoses</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${doc.diagnoses.map(d=>`<span class="diagnosis-tag">${d}</span>`).join("")}</div></div>`:""}
-${doc.medications?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">💊 Medications Mentioned</div>${doc.medications.map(m=>`<div style="font-size:13px;color:#d9c7b9;padding:5px 0;border-bottom:1px solid #2a2018">• ${m}</div>`).join("")}</div>`:""}
-${doc.followUp?`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #c9a66b"><div class="section-title-sm">📋 Follow-Up</div><div style="font-size:13px;color:#d9c7b9;margin-top:8px;line-height:1.7">${doc.followUp}</div></div>`:""}
+${doc.medications?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">💊 Medications Mentioned</div>${doc.medications.map(m=>`<div style="font-size:15px;color:#d9c7b9;padding:5px 0;border-bottom:1px solid #2a2018">• ${m}</div>`).join("")}</div>`:""}
+${doc.followUp?`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #c9a66b"><div class="section-title-sm">📋 Follow-Up</div><div style="font-size:15px;color:#d9c7b9;margin-top:8px;line-height:1.7">${doc.followUp}</div></div>`:""}
 <div class="hint-text">Uploaded ${doc.uploadDate} · ${doc.fileName}</div>`;
   }
 
@@ -744,14 +749,14 @@ ${doc.followUp?`<div class="form-card" style="margin-bottom:12px;border-left:3px
   ${state.people.map(p=>`
     <button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setDocsPerson" data-person="${p}">
       <span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}
-      ${state.docs.filter(d=>d.person===p).length>0?`<span style="background:#c9a66b33;color:#c9a66b;border-radius:8px;padding:1px 6px;font-size:10px;margin-left:2px">${state.docs.filter(d=>d.person===p).length}</span>`:""}
+      ${state.docs.filter(d=>d.person===p).length>0?`<span style="background:#c9a66b33;color:#c9a66b;border-radius:8px;padding:1px 6px;font-size:14px;margin-left:2px">${state.docs.filter(d=>d.person===p).length}</span>`:""}
     </button>`).join("")}
 </div>
 <div class="doc-upload-area">
   <div class="doc-upload-label">Add document for ${activePerson}</div>
   <div class="doc-upload-row">
     <label class="doc-upload-btn primary" style="opacity:${state.docUploading?.6:1}">
-      <span class="icon">📷</span><span style="font-size:13px">Take Photo</span><span style="font-size:10px;opacity:.7">Best for lab printouts</span>
+      <span class="icon">📷</span><span style="font-size:15px">Take Photo</span><span style="font-size:14px;opacity:.7">Best for lab printouts</span>
       <input type="file" accept="image/*" capture="environment" style="display:none" data-upload="doc" ${state.docUploading?"disabled":""}/>
     </label>
     <div style="display:flex;flex-direction:column;gap:8px;flex:1">
@@ -767,7 +772,7 @@ ${doc.followUp?`<div class="form-card" style="margin-bottom:12px;border-left:3px
   </div>
   <div class="hint-text" style="margin-top:6px">📱 Tip: Screenshot your MyChart results and use Gallery</div>
 </div>
-${state.docUploading?`<div style="background:#261e16;border-radius:12px;padding:16px;text-align:center;margin-bottom:14px;border:1px solid #c9a66b44"><div style="font-size:28px;margin-bottom:8px">🤖</div><div style="color:#c9a66b;font-weight:600;font-size:14px">Claude is reading the document…</div><div style="color:#8a7a70;font-size:12px;margin-top:4px">Extracting lab values, diagnoses & summary</div></div>`:""}
+${state.docUploading?`<div style="background:#261e16;border-radius:12px;padding:16px;text-align:center;margin-bottom:14px;border:1px solid #c9a66b44"><div style="font-size:28px;margin-bottom:8px">🤖</div><div style="color:#c9a66b;font-weight:600;font-size:14px">Claude is reading the document…</div><div style="color:#8a7a70;font-size:14px;margin-top:4px">Extracting lab values, diagnoses & summary</div></div>`:""}
 ${personDocs.length===0&&!state.docUploading?`<div class="empty-state"><div style="font-size:36px;margin-bottom:8px">📂</div>No documents for ${activePerson} yet.</div>`:""}
 ${personDocs.map(doc=>`
   <button class="doc-card" style="border-left-color:${getColor(doc.person)}" data-action="viewDoc" data-id="${doc.id}">
@@ -775,9 +780,9 @@ ${personDocs.map(doc=>`
       <div class="doc-icon">${TYPE_ICONS[doc.type]||"📄"}</div>
       <div style="flex:1;text-align:left">
         <div style="font-weight:700;font-size:14px;color:#f0e6d8">${doc.title}</div>
-        <div style="font-size:12px;color:#a08a7a;margin-top:2px">${doc.type} · ${doc.uploadDate}</div>
-        <div style="font-size:12px;color:#8a7a70;margin-top:4px">${doc.summary?.slice(0,90)}${doc.summary?.length>90?"…":""}</div>
-        ${doc.keyValues?.some(kv=>kv.flag==="high"||kv.flag==="low")?`<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${doc.keyValues.filter(kv=>kv.flag==="high"||kv.flag==="low").slice(0,3).map(kv=>`<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${FLAG_COLORS[kv.flag]}22;color:${FLAG_COLORS[kv.flag]};font-weight:600">${kv.label} ${kv.flag==="high"?"↑":"↓"}</span>`).join("")}</div>`:""}
+        <div style="font-size:14px;color:#a08a7a;margin-top:2px">${doc.type} · ${doc.uploadDate}</div>
+        <div style="font-size:14px;color:#8a7a70;margin-top:4px">${doc.summary?.slice(0,90)}${doc.summary?.length>90?"…":""}</div>
+        ${doc.keyValues?.some(kv=>kv.flag==="high"||kv.flag==="low")?`<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${doc.keyValues.filter(kv=>kv.flag==="high"||kv.flag==="low").slice(0,3).map(kv=>`<span style="font-size:14px;padding:2px 7px;border-radius:8px;background:${FLAG_COLORS[kv.flag]}22;color:${FLAG_COLORS[kv.flag]};font-weight:600">${kv.label} ${kv.flag==="high"?"↑":"↓"}</span>`).join("")}</div>`:""}
       </div>
       <div style="color:#5a4a43;font-size:18px">›</div>
     </div>
@@ -792,9 +797,9 @@ function buildEmergency() {
   if (state.editingEmergency) {
     const ef = state.emergencyForm;
     return `
-<div class="emergency-header"><div style="font-size:22px">🚨</div><div><div style="font-weight:700;font-size:16px">Emergency Information</div><div style="font-size:11px;opacity:.8;letter-spacing:.1em">SHOW THIS TO FIRST RESPONDERS</div></div></div>
+<div class="emergency-header"><div style="font-size:22px">🚨</div><div><div style="font-weight:700;font-size:16px">Emergency Information</div><div style="font-size:15px;opacity:.8;letter-spacing:.1em">SHOW THIS TO FIRST RESPONDERS</div></div></div>
 <div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px">
-  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="font-size:12px;padding:5px 12px;${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setEmergencyPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}</button>`).join("")}
+  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="font-size:14px;padding:5px 12px;${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setEmergencyPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}</button>`).join("")}
 </div>
 <div class="form-card">
   <div style="font-size:14px;font-weight:700;margin-bottom:12px">${activePerson} — Edit Emergency Info</div>
@@ -812,29 +817,29 @@ function buildEmergency() {
   }
 
   return `
-<div class="emergency-header"><div style="font-size:22px">🚨</div><div><div style="font-weight:700;font-size:16px">Emergency Information</div><div style="font-size:11px;opacity:.8;letter-spacing:.1em">SHOW THIS TO FIRST RESPONDERS</div></div></div>
+<div class="emergency-header"><div style="font-size:22px">🚨</div><div><div style="font-weight:700;font-size:16px">Emergency Information</div><div style="font-size:15px;opacity:.8;letter-spacing:.1em">SHOW THIS TO FIRST RESPONDERS</div></div></div>
 <div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px">
-  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="font-size:12px;padding:5px 12px;${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setEmergencyPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}</button>`).join("")}
+  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="font-size:14px;padding:5px 12px;${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setEmergencyPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}</button>`).join("")}
 </div>
 <div class="emergency-card">
   <div class="section-title-sm">Vitals</div>
   <div class="emergency-grid">
-    ${[["🩸 Blood Type",profile.blood],["🎂 Date of Birth",profile.dob],["⚖️ Weight",profile.weight]].map(([k,v])=>`<div class="emergency-stat"><div style="font-size:10px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">${k}</div><div style="font-size:15px;font-weight:700">${v||`<span style="color:#5a4a43">Not set</span>`}</div></div>`).join("")}
+    ${[["🩸 Blood Type",profile.blood],["🎂 Date of Birth",profile.dob],["⚖️ Weight",profile.weight]].map(([k,v])=>`<div class="emergency-stat"><div style="font-size:14px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">${k}</div><div style="font-size:15px;font-weight:700">${v||`<span style="color:#5a4a43">Not set</span>`}</div></div>`).join("")}
   </div>
 </div>
 <div class="emergency-card">
   <div class="section-title-sm">⚠️ Allergies</div>
-  ${profile.allergies?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${profile.allergies.split(",").map(a=>a.trim()).filter(Boolean).map(a=>`<span class="allergy-tag">${a}</span>`).join("")}</div>`:`<div style="color:#5a4a43;font-size:13px;margin-top:6px">No allergies recorded</div>`}
+  ${profile.allergies?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${profile.allergies.split(",").map(a=>a.trim()).filter(Boolean).map(a=>`<span class="allergy-tag">${a}</span>`).join("")}</div>`:`<div style="color:#5a4a43;font-size:15px;margin-top:6px">No allergies recorded</div>`}
 </div>
 <div class="emergency-card">
   <div class="section-title-sm">💊 Current Medications</div>
-  ${personMeds.length===0?`<div style="color:#5a4a43;font-size:13px;margin-top:6px">No medications on file</div>`:""}
-  ${personMeds.map(m=>`<div class="emergency-med-row"><div class="med-dot" style="background:${getColor(m.person)};margin-top:4px"></div><div><div style="font-weight:600;font-size:14px">${m.name} · ${m.dose}</div><div style="color:#a08a7a;font-size:12px">${m.frequency}</div></div></div>`).join("")}
+  ${personMeds.length===0?`<div style="color:#5a4a43;font-size:15px;margin-top:6px">No medications on file</div>`:""}
+  ${personMeds.map(m=>`<div class="emergency-med-row"><div class="med-dot" style="background:${getColor(m.person)};margin-top:4px"></div><div><div style="font-weight:600;font-size:14px">${m.name} · ${m.dose}</div><div style="color:#a08a7a;font-size:14px">${m.frequency}</div></div></div>`).join("")}
 </div>
-${profile.conditions?`<div class="emergency-card"><div class="section-title-sm">🏥 Medical Conditions</div><div style="font-size:13px;color:#d9c7b9;margin-top:6px;line-height:1.6">${profile.conditions}</div></div>`:""}
+${profile.conditions?`<div class="emergency-card"><div class="section-title-sm">🏥 Medical Conditions</div><div style="font-size:15px;color:#d9c7b9;margin-top:6px;line-height:1.6">${profile.conditions}</div></div>`:""}
 <div class="emergency-card">
   <div class="section-title-sm">📞 Contacts</div>
-  ${[["Primary Doctor",profile.doctor,profile.doctorPhone],["Emergency Contact",profile.emergency,profile.emergencyPhone]].map(([label,name,phone])=>`<div style="margin-top:8px"><div style="font-size:11px;color:#8a7a70;text-transform:uppercase;letter-spacing:.05em">${label}</div><div style="font-size:14px;font-weight:600">${name||`<span style="color:#5a4a43">Not set</span>`}</div>${phone?`<div style="font-size:13px;color:#c9a66b">${phone}</div>`:""}</div>`).join("")}
+  ${[["Primary Doctor",profile.doctor,profile.doctorPhone],["Emergency Contact",profile.emergency,profile.emergencyPhone]].map(([label,name,phone])=>`<div style="margin-top:8px"><div style="font-size:15px;color:#8a7a70;text-transform:uppercase;letter-spacing:.05em">${label}</div><div style="font-size:14px;font-weight:600">${name||`<span style="color:#5a4a43">Not set</span>`}</div>${phone?`<div style="font-size:15px;color:#c9a66b">${phone}</div>`:""}</div>`).join("")}
 </div>
 <button class="add-btn" style="width:100%;padding:12px;border-radius:12px;font-size:14px;margin-top:4px" data-action="startEditEmergency">✏️ Edit ${activePerson}'s Info</button>`;
 }
@@ -848,11 +853,11 @@ function buildReport(filtered) {
 
   return `
 <div class="report-header">
-  <div><div style="font-weight:700;font-size:16px">Adherence Report</div><div style="font-size:11px;color:#c9a66b;letter-spacing:.1em;margin-top:2px">GENERATED ${today.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}).toUpperCase()}</div></div>
+  <div><div style="font-weight:700;font-size:16px">Adherence Report</div><div style="font-size:15px;color:#c9a66b;letter-spacing:.1em;margin-top:2px">GENERATED ${today.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}).toUpperCase()}</div></div>
   <div style="font-size:28px">📊</div>
 </div>
 <div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px">
-  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="font-size:12px;padding:5px 12px;${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setReportPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}</button>`).join("")}
+  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="font-size:14px;padding:5px 12px;${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setReportPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}</button>`).join("")}
 </div>
 <div class="range-btns">
   ${[["7","7 Days"],["30","30 Days"],["90","90 Days"]].map(([v,l])=>`<button class="range-btn ${state.reportRange===v?"active":""}" data-action="setReportRange" data-range="${v}">${l}</button>`).join("")}
@@ -868,16 +873,16 @@ function buildReport(filtered) {
 </div>
 <div class="form-card" style="margin-bottom:14px">
   <div style="font-weight:700;font-size:14px;margin-bottom:12px">Medication Breakdown</div>
-  ${personMeds.length===0?`<div style="color:#5a4a43;font-size:13px">No medications on file</div>`:""}
+  ${personMeds.length===0?`<div style="color:#5a4a43;font-size:15px">No medications on file</div>`:""}
   ${personMeds.map(med=>{
     const pct2=med.taken?100:0; const c=getColor(med.person);
-    return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px"><span style="font-weight:600">${med.name} <span style="color:#8a7a70;font-weight:400">· ${med.dose}</span></span><span style="color:${c};font-weight:700">${pct2}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct2}%;background:${c}"></div></div><div style="font-size:11px;color:#8a7a70;margin-top:3px">${med.frequency} · ${med.taken?"✓ Taken today":"⏳ Pending today"}</div></div>`;
+    return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:15px"><span style="font-weight:600">${med.name} <span style="color:#8a7a70;font-weight:400">· ${med.dose}</span></span><span style="color:${c};font-weight:700">${pct2}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct2}%;background:${c}"></div></div><div style="font-size:15px;color:#8a7a70;margin-top:3px">${med.frequency} · ${med.taken?"✓ Taken today":"⏳ Pending today"}</div></div>`;
   }).join("")}
 </div>
 <div class="form-card">
   <div style="font-weight:700;font-size:14px;margin-bottom:8px">📝 Notes for Provider</div>
-  <div style="font-size:13px;color:#d9c7b9;line-height:1.7">${adherencePct>=90?`${activePerson} shows excellent medication adherence at ${adherencePct}%. No concerns noted.`:adherencePct>=70?`${activePerson} shows good overall adherence at ${adherencePct}%. Some missed doses recorded.`:`${activePerson}'s adherence rate of ${adherencePct}% is below target. Consider discussing barriers at next visit.`}</div>
-  ${ep.allergies?`<div style="margin-top:10px;padding:8px 10px;background:#3a1a14;border-radius:8px;font-size:12px;color:#e8a090">⚠️ Allergies on file: ${ep.allergies}</div>`:""}
+  <div style="font-size:15px;color:#d9c7b9;line-height:1.7">${adherencePct>=90?`${activePerson} shows excellent medication adherence at ${adherencePct}%. No concerns noted.`:adherencePct>=70?`${activePerson} shows good overall adherence at ${adherencePct}%. Some missed doses recorded.`:`${activePerson}'s adherence rate of ${adherencePct}% is below target. Consider discussing barriers at next visit.`}</div>
+  ${ep.allergies?`<div style="margin-top:10px;padding:8px 10px;background:#3a1a14;border-radius:8px;font-size:14px;color:#e8a090">⚠️ Allergies on file: ${ep.allergies}</div>`:""}
 </div>`;
 }
 
@@ -892,8 +897,8 @@ ${weekDays.map((d,i)=>{
       <span style="font-weight:${isT?700:400};color:${isT?"#c9a66b":"#d9c7b9"}">${DAYS[d.getDay()]} ${d.getDate()}</span>
       ${isT?`<span class="today-badge">Today</span>`:""}
     </div>
-    ${dayMeds.length===0?`<div style="color:#7a6a62;font-size:13px;padding:4px 0">No scheduled medications</div>`:""}
-    ${dayMeds.map(med=>`<div class="schedule-med-row"><div style="width:8px;height:8px;border-radius:50%;background:${getColor(med.person)};flex-shrink:0"></div><div><div style="font-weight:600;font-size:14px">${med.name} · ${med.dose}</div><div style="color:#d9c7b9;font-size:12px">${med.time} · ${med.person}</div></div>${isT&&med.taken?`<span class="taken-badge" style="margin-left:auto">✓</span>`:""}</div>`).join("")}
+    ${dayMeds.length===0?`<div style="color:#7a6a62;font-size:15px;padding:4px 0">No scheduled medications</div>`:""}
+    ${dayMeds.map(med=>`<div class="schedule-med-row"><div style="width:8px;height:8px;border-radius:50%;background:${getColor(med.person)};flex-shrink:0"></div><div><div style="font-weight:600;font-size:14px">${med.name} · ${med.dose}</div><div style="color:#d9c7b9;font-size:14px">${med.time} · ${med.person}</div></div>${isT&&med.taken?`<span class="taken-badge" style="margin-left:auto">✓</span>`:""}</div>`).join("")}
   </div>`;
 }).join("")}`;
 }
