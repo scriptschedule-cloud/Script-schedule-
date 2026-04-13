@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="ScriptSchedule"/>
+<meta name="theme-color" content="#1e1610"/>
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<title>ScriptSchedule</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#1e1610;color:#f0e6d8;font-family:Georgia,'Times New Roman',serif;min-height:100vh}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes scanMove{0%,100%{top:20%}50%{top:70%}}
+@keyframes slideDown{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:#3a2e24;border-radius:2px}
+/* ── INSTALL BANNER ── */
+#install-banner{position:fixed;bottom:0;left:0;right:0;background:#2a1f14;border-top:2px solid #c9a66b;padding:18px 18px 36px;z-index:99999;transform:translateY(110%);transition:transform .45s cubic-bezier(.34,1.4,.64,1);box-shadow:0 -12px 48px rgba(0,0,0,.7)}
+#install-banner.show{transform:translateY(0)}
+.ib-top{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px}
+.ib-icon{width:50px;height:50px;border-radius:13px;overflow:hidden;flex-shrink:0;box-shadow:0 4px 16px rgba(201,166,107,.3)}
+.ib-icon img{width:100%;height:100%;object-fit:cover}
+.ib-words h3{font-size:16px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;line-height:1.3}
+.ib-words p{font-size:12px;color:#a0896e;margin-top:3px;font-family:Georgia,serif}
+.ib-close{position:absolute;top:12px;right:12px;background:none;border:none;color:#a0896e;font-size:24px;cursor:pointer;padding:6px;line-height:1}
+#btn-install{width:100%;background:#c9a66b;color:#1a1008;border:none;border-radius:13px;padding:15px;font-size:15px;font-weight:700;font-family:Georgia,serif;cursor:pointer;letter-spacing:.02em}
+#btn-install:active{background:#b8954f;transform:scale(.98)}
+#ios-steps{display:none;flex-direction:column;gap:9px}
+.ios-step{display:flex;align-items:center;gap:12px;background:#1e1610;border:1px solid #3d2e1a;border-radius:11px;padding:12px 14px}
+.snum{width:24px;height:24px;background:#c9a66b;color:#1a1008;border-radius:50%;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sico{font-size:20px;flex-shrink:0}
+.stxt{font-size:13px;color:#f0e6d8;font-family:Georgia,serif;line-height:1.4}
+.stxt b{color:#c9a66b}
+
+/* LAYOUT */
+.app{max-width:480px;margin:0 auto;min-height:100vh;position:relative}
+header{background:linear-gradient(135deg,#1a1008,#2a1f14);border-bottom:1px solid #3a2e24;position:sticky;top:0;z-index:50}
+.header-inner{display:flex;align-items:center;justify-content:space-between;padding:14px 18px}
+.logo-area{display:flex;align-items:center;gap:10px}
+.logo-img{width:42px;height:42px;border-radius:10px;object-fit:cover}
+.logo-text{font-size:18px;font-weight:700;letter-spacing:-0.02em;color:#f0e6d8}
+.logo-sub{font-size:10px;color:#c9a66b;letter-spacing:.12em;text-transform:uppercase}
+.header-date{font-size:13px;color:#a08a7a;font-style:italic}
+
+/* PEOPLE BAR */
+.people-section{background:#1a1208;border-bottom:1px solid #2a2018}
+.people-bar{display:flex;gap:6px 8px;padding:8px 14px;flex-wrap:wrap;align-items:center;}
+.people-bar::-webkit-scrollbar{display:none}
+.person-wrap{position:relative;display:flex;align-items:center;flex-shrink:0}
+.person-btn{display:flex;align-items:center;gap:6px;border:1px solid #3a2e24;border-radius:20px;padding:6px 14px;background:transparent;color:#d9c7b9;cursor:pointer;white-space:nowrap;font-size:13px;font-family:Georgia,serif}
+.person-btn.active{font-weight:700}
+.avatar{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#1a1008;flex-shrink:0}
+.remove-btn{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#5a2a1a;color:#e8a090;border:none;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
+.add-person-btn{border:1px dashed #5a4a43;border-radius:20px;padding:6px 12px;background:transparent;color:#8a7a70;cursor:pointer;white-space:nowrap;font-size:13px;font-family:Georgia,serif;flex-shrink:0}
+.add-person-input{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.person-name-input{padding:5px 10px;border-radius:20px;border:1px solid #c9a66b;background:#1e1610;color:#f0e6d8;font-size:13px;width:90px;outline:none;font-family:Georgia,serif}
+.confirm-btn{background:#4a7c59;color:#fff;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px}
+.cancel-btn{background:#5a2a1a;color:#e8a090;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px}
+
+/* NAV */
+nav{display:flex;background:#1a1208;overflow-x:auto;scrollbar-width:none;position:fixed;bottom:0;left:0;right:0;z-index:60;border-top:1px solid #3a2e24;box-shadow:0 -4px 24px rgba(0,0,0,.5);max-width:480px;margin:0 auto}
+nav::-webkit-scrollbar{display:none}
+.nav-btn{flex:1;min-width:56px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 4px 16px;background:transparent;border:none;color:#8a7a70;cursor:pointer;font-size:11px;font-family:Georgia,serif;white-space:nowrap}
+.nav-btn.active{color:#c9a66b;border-top:2px solid #c9a66b}
+.nav-icon{font-size:20px}
+
+/* MAIN */
+main{padding:14px 14px 100px;animation:fadeIn .3s ease}
+
+/* CARDS */
+.stat-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+.stat-card{background:#261e16;border:1px solid;border-radius:14px;padding:14px 10px;text-align:center}
+.stat-num{font-size:28px;font-weight:700;color:#c9a66b}
+.stat-label{font-size:11px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+.progress-card{background:#261e16;border-radius:14px;padding:14px;margin-bottom:14px}
+.progress-label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;color:#d9c7b9}
+.progress-track{height:8px;background:#3a2e24;border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,#c9a66b,#e8c87a);border-radius:4px;transition:width .6s ease}
+.section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.add-btn{background:#c9a66b;color:#1a1008;border:none;border-radius:20px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:13px;font-family:Georgia,serif}
+.back-btn{background:transparent;border:none;color:#c9a66b;cursor:pointer;font-size:14px;padding:0;font-family:Georgia,serif}
+.empty-state{text-align:center;padding:30px 20px;color:#8a7a70;font-size:16px}
+
+/* MED CARD */
+.med-card{background:#261e16;border-radius:14px;padding:14px;margin-bottom:10px;border-left:3px solid;transition:opacity .3s}
+.med-card.taken{opacity:.65}
+.med-card-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px}
+.med-dot{width:10px;height:10px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.med-name{font-size:17px;font-weight:700;color:#f0e6d8}
+.med-meta{font-size:14px;color:#a08a7a;margin-top:2px}
+.med-notes{font-size:12px;color:#8a7a70;margin-top:4px;font-style:italic}
+.person-tag{font-size:11px;padding:3px 8px;border-radius:10px;font-weight:600;flex-shrink:0}
+.med-next-due{font-size:12px;color:#8a7a70;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.taken-badge{background:#2a4a34;color:#8cc49a;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
+.med-btns{display:flex;gap:8px}
+.btn-take{flex:1;background:#c9a66b;color:#1a1008;border:none;border-radius:10px;padding:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:Georgia,serif}
+.btn-edit{flex:1;background:#3a2e24;color:#d9c7b9;border:none;border-radius:10px;padding:8px;cursor:pointer;font-size:13px;font-family:Georgia,serif}
+.btn-delete{flex:1;background:#3a1a14;color:#e8a090;border:none;border-radius:10px;padding:8px;cursor:pointer;font-size:13px;font-family:Georgia,serif}
+
+/* FORM */
+.form-card{background:#261e16;border-radius:16px;padding:16px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.form-label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:#a08a7a;letter-spacing:.05em;text-transform:uppercase}
+.form-label.full{grid-column:1/-1}
+.form-input{padding:10px 12px;border-radius:10px;border:1px solid #3a2e24;background:#1e1610;color:#f0e6d8;font-size:14px;font-family:Georgia,serif;width:100%}
+.form-input:focus{outline:1px solid #c9a66b}
+textarea.form-input{min-height:72px;resize:vertical}
+.submit-btn{width:100%;background:linear-gradient(135deg,#c9a66b,#e8c87a);color:#1a1008;border:none;border-radius:12px;padding:13px;font-weight:700;cursor:pointer;font-size:15px;font-family:Georgia,serif;margin-top:4px}
+
+/* SCAN */
+.scan-card{background:#261e16;border-radius:16px;padding:16px}
+.scan-frame{height:220px;background:#1a1208;border-radius:14px;border:2px dashed #3a2e24;display:flex;align-items:center;justify-content:center;margin-bottom:14px;position:relative;overflow:hidden}
+.scan-frame.active{border-color:#c9a66b}
+.scan-placeholder{text-align:center;color:#d9c7b9;font-size:14px}
+.scan-placeholder .icon{font-size:44px;margin-bottom:8px}
+.scan-overlay{position:absolute;inset:0;background:rgba(26,16,8,.75);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#c9a66b;font-size:13px;font-weight:600}
+.scan-img{width:100%;height:100%;object-fit:cover;border-radius:12px}
+.scan-btn-row{display:flex;gap:10px;margin-bottom:12px}
+.scan-btn{flex:1;background:#3a2e24;color:#d9c7b9;border:1px solid #4a3e34;border-radius:12px;padding:13px;font-size:14px;cursor:pointer;font-family:Georgia,serif;text-align:center;display:block}
+.scan-btn.secondary{background:#2a2018}
+.scan-result-card{background:#1a1208;border-radius:14px;padding:14px;margin-top:12px;border:1px solid #3a4e38}
+.scan-result-title{color:#8cc49a;font-weight:700;font-size:14px;margin-bottom:10px}
+.scan-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2a2018;font-size:13px}
+.scan-key{color:#8a7a70;text-transform:uppercase;font-size:11px;letter-spacing:.05em}
+.scan-val{color:#f0e6d8;font-weight:600}
+.hint-text{color:#5a4a43;font-size:11px;text-align:center;margin-top:8px;line-height:1.6}
+.error-box{background:#3a1a14;border:1px solid #8a4b3a;border-radius:12px;padding:12px;color:#e8a090;font-size:13px;margin-bottom:12px;line-height:1.6}
+
+/* PILL ID */
+.tab-switch{display:flex;background:#261e16;border-radius:12px;padding:4px;margin-bottom:16px}
+.tab-btn{flex:1;padding:8px;border-radius:9px;border:none;cursor:pointer;font-size:13px;font-family:Georgia,serif;transition:all .2s}
+.tab-btn.active{background:#c9a66b;color:#1a1008;font-weight:700}
+.tab-btn:not(.active){background:transparent;color:#8a7a70}
+.pill-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.pill-stat{background:#1e1610;border-radius:10px;padding:8px 10px}
+.pill-stat-label{font-size:10px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.pill-stat-val{font-size:13px;font-weight:600;color:#f0e6d8}
+.tag{font-size:12px;padding:4px 10px;border-radius:20px;background:#2a2018;color:#d9c7b9;border:1px solid #3a3020}
+.allergy-tag{font-size:12px;padding:4px 10px;border-radius:20px;background:#4a1a14;color:#e8908a;border:1px solid #7a2a20}
+.diagnosis-tag{font-size:12px;padding:4px 10px;border-radius:20px;background:#2a3a4a;color:#8fa8c8;border:1px solid #3a4a5a}
+.ix-row{padding:10px 0;border-bottom:1px solid #2a2018}
+.severity-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;text-transform:uppercase}
+
+/* EMERGENCY */
+.emergency-header{background:linear-gradient(135deg,#7a1010,#b02020);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.emergency-card{background:#261e16;border-radius:14px;padding:14px;margin-bottom:10px}
+.section-title-sm{font-size:12px;font-weight:700;color:#c9a66b;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px}
+.emergency-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.emergency-stat{background:#1e1610;border-radius:10px;padding:10px 12px}
+.emergency-med-row{display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:1px solid #2a2018}
+
+/* REPORT */
+.report-header{background:linear-gradient(135deg,#1a1008,#2a1f14);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;border:1px solid #3a2e24}
+.range-btns{display:flex;gap:8px;margin-bottom:14px}
+.range-btn{flex:1;padding:8px;border-radius:10px;border:1px solid #3a2e24;background:transparent;color:#d9c7b9;cursor:pointer;font-size:13px;font-family:Georgia,serif}
+.range-btn.active{background:#c9a66b;color:#1a1008;font-weight:700}
+
+/* DOCS */
+.doc-upload-area{margin-bottom:14px}
+.doc-upload-label{font-size:11px;color:#8a7a70;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
+.doc-upload-row{display:flex;gap:8px}
+.doc-upload-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:#261e16;border:1px solid #3a2e24;border-radius:12px;padding:12px 8px;color:#d9c7b9;text-align:center;cursor:pointer;font-family:Georgia,serif;font-size:12px}
+.doc-upload-btn.primary{flex:2;background:linear-gradient(135deg,#c9a66b,#e8c87a);color:#1a1008;font-weight:700}
+.doc-upload-btn .icon{font-size:20px}
+.doc-card{width:100%;background:#261e16;border-radius:14px;padding:14px;margin-bottom:10px;border-left:3px solid;cursor:pointer;border-top:none;border-right:none;border-bottom:none;text-align:left;display:block}
+.doc-icon{font-size:22px;width:36px;height:36px;background:#1e1610;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.doc-type-badge{font-size:11px;padding:3px 8px;border-radius:10px;background:#3a2e24;color:#c9a66b;font-weight:600}
+.lab-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2a2018;font-size:13px}
+.lab-label{color:#a08a7a}
+.lab-value{font-weight:700}
+.flag-high{color:#e8a090}
+.flag-low{color:#8fa8c8}
+.flag-normal{color:#f0e6d8}
+
+/* LOADING */
+#loading{position:fixed;inset:0;background:#1e1610;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:9999}
+#loading img{width:64px;height:64px;border-radius:16px}
+#loading p{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:#c9a66b;opacity:.8}
+
+/* TOAST */
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);padding:10px 22px;border-radius:20px;color:#fff;font-size:14px;font-weight:600;z-index:999;box-shadow:0 4px 24px rgba(0,0,0,.4);animation:slideDown .3s ease;white-space:nowrap}
+
+/* WEEKLY STRIP */
+.week-strip{display:flex;justify-content:space-around;padding:10px 14px;background:#1e1610;border-bottom:1px solid #2a2018}
+.day-pill{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 8px;border-radius:10px}
+.day-pill.today{background:#3a2e24}
+.day-name{font-size:10px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em}
+.day-num{font-size:16px;font-weight:600;color:#f0e6d8}
+
+/* SCHEDULE */
+.schedule-day{background:#261e16;border-radius:14px;padding:14px;margin-bottom:10px;border-left:3px solid #3a2e24}
+.schedule-day-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px}
+.today-badge{background:#c9a66b22;color:#c9a66b;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.schedule-med-row{display:flex;align-items:center;gap:10px;padding:6px 0}
+
+@media(max-width:480px){.form-grid{grid-template-columns:1fr}.stat-row{gap:6px}}
+
+/* TUTORIAL */
+#tut{position:fixed;inset:0;background:rgba(12,6,2,.93);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .3s}
+#tut.show{opacity:1;pointer-events:all}
+.tut-box{background:#261e16;border:1px solid rgba(200,154,88,.35);border-radius:22px;padding:26px 22px;max-width:340px;width:100%;text-align:center}
+.tut-box h2{font-family:Georgia,serif;font-size:1.3rem;color:#f0e6d8;margin-bottom:8px}
+.tut-box p{font-size:13px;color:#8a7a70;margin-bottom:20px;line-height:1.6}
+.tut-steps{text-align:left;display:flex;flex-direction:column;gap:14px;margin-bottom:22px}
+.tut-step{display:flex;gap:12px;align-items:flex-start}
+.tut-n{width:26px;height:26px;border-radius:50%;background:#c9a66b;color:#1a1008;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.tut-t{font-size:13px;color:#d9c7b9;line-height:1.5}
+.tut-t b{color:#c9a66b}
+.tut-go{width:100%;background:linear-gradient(135deg,#8B6914,#c9a66b);color:#1a1008;border:none;border-radius:13px;padding:14px;font-size:15px;font-weight:700;font-family:Georgia,serif;cursor:pointer;margin-bottom:8px}
+.tut-skip{background:none;border:none;color:#5a4a43;font-size:12px;cursor:pointer;font-family:Georgia,serif;width:100%}
+</style>
+</head>
+<body>
+<script>
+// Clear old service worker cache so new version loads
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(regs) {
+    regs.forEach(function(reg) { reg.unregister(); });
+  });
+  caches.keys().then(function(keys) {
+    keys.forEach(function(key) { caches.delete(key); });
+  });
+}
+</script>
+<div id="loading">
+  <img src="/icon-192.png" alt="ScriptSchedule"/>
+  <p>Loading ScriptSchedule...</p>
+</div>
+<div class="app" id="app" style="display:none"></div>
+
+<script>
+const LOGO_SRC = "/icon-192.png";
+// ── DATA ────────────────────────────────────────────────────────────────────
+const DEFAULT_PEOPLE = ["Your Name","Family Member"];
+const DEFAULT_PETS = ["Pet"];
+const EXTRA_COLORS = ["#c47a7a","#b07abf","#7ab8bf","#bf9e7a","#7abf8c","#bf7aaa","#8fa8c8"];
+const BASE_COLORS = {"Your Name":"#c9a66b","Family Member":"#8c9e7a","Pet":"#c47a7a"};
+const SAMPLE_MEDS = [
+  {id:1,person:"Your Name",name:"Medication Name",dose:"10mg",frequency:"Daily",time:"08:00",notes:"Take with water",nextDue:"Today 8:00 AM",taken:false},
+  {id:2,person:"Family Member",name:"Vitamin D3",dose:"2000 IU",frequency:"Daily",time:"09:00",notes:"Take with food",nextDue:"Today 9:00 AM",taken:false}
+];
+const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const today = new Date();
+const TYPE_ICONS = {"Lab Results":"🧪","Doctor Report":"👨‍⚕️","Prescription":"💊","Imaging":"🔬","Discharge Summary":"🏥","Other":"📄"};
+const FLAG_COLORS = {high:"#e8a090",low:"#8fa8c8",normal:"#f0e6d8"};
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let state = {
+  view: "dashboard",
+  selectedPerson: "All",
+  meds: [],
+  people: [],
+  pets: [],
+  colorMap: {},
+  emergencyProfiles: {},
+  docs: [],
+  loaded: false,
+  // UI state
+  showAddPerson: false,
+  newPersonName: "",
+  editMedId: null,
+  form: {person:"Your Name",name:"",dose:"",frequency:"Daily",time:"08:00",notes:"",pharmacy:""},
+  scanImagePreview: null,
+  scanActive: false,
+  scanResult: null,
+  scanError: null,
+  pillTab: "photo",
+  pillImage: null,
+  pillImprint: "",
+  pillLoading: false,
+  pillResult: null,
+  pillError: null,
+  emergencyPerson: null,
+  editingEmergency: false,
+  emergencyForm: {},
+  reportPerson: null,
+  reportRange: "30",
+  docsPerson: null,
+  docViewing: null,
+  docUploading: false,
+  toast: null,
+  toastTimer: null
+};
+
+// ── STORAGE ──────────────────────────────────────────────────────────────────
+function save(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
+}
+function load(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch(e) { return fallback; }
+}
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+function getColor(p) { return state.colorMap[p] || "#8c7b74"; }
+function getInitials(n) { return n.split(" ").map(x=>x[0]).join("").toUpperCase(); }
+function getFiltered() {
+  return state.selectedPerson === "All" ? state.meds : state.meds.filter(m=>m.person===state.selectedPerson);
+}
+function getAllPeople() { return [...state.people, ...state.pets]; }
+function showToast(msg, type="success") {
+  if (state.toastTimer) clearTimeout(state.toastTimer);
+  state.toast = {msg, type};
+  render();
+  state.toastTimer = setTimeout(()=>{ state.toast=null; render(); }, 2800);
+}
+function setState(updates) { Object.assign(state, updates); render(); }
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+function init() {
+  state.meds = load("ss:meds", SAMPLE_MEDS);
+  state.people = load("ss:people", DEFAULT_PEOPLE);
+  state.pets = load("ss:pets", DEFAULT_PETS);
+  state.colorMap = load("ss:colors", BASE_COLORS);
+  state.emergencyProfiles = load("ss:emergency", {});
+  state.docs = load("ss:docs", []);
+  state.loaded = true;
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  render();
+}
+
+// ── ACTIONS ──────────────────────────────────────────────────────────────────
+function takeMed(id) {
+  state.meds = state.meds.map(m=>m.id===id?{...m,taken:true}:m);
+  save("ss:meds", state.meds);
+  showToast("✓ Medication marked as taken");
+}
+function deleteMed(id) {
+  state.meds = state.meds.filter(m=>m.id!==id);
+  save("ss:meds", state.meds);
+  showToast("Medication removed","info");
+  render();
+}
+function openAdd() {
+  state.editMedId = null;
+  state.form = {person:state.selectedPerson==="All"?"Your Name":state.selectedPerson,name:"",dose:"",frequency:"Daily",time:"08:00",notes:"",pharmacy:""};
+  setState({view:"add"});
+}
+function openEdit(med) {
+  state.editMedId = med.id;
+  state.form = {person:med.person,name:med.name,dose:med.dose,frequency:med.frequency,time:med.time,notes:med.notes||"",pharmacy:med.pharmacy||""};
+  setState({view:"add"});
+}
+function submitForm() {
+  if (!state.form.name||!state.form.dose) { showToast("Name and dose required","error"); return; }
+  if (state.editMedId) {
+    state.meds = state.meds.map(m=>m.id===state.editMedId?{...m,...state.form}:m);
+    showToast("✓ Medication updated");
+  } else {
+    state.meds.push({id:Date.now(),...state.form,nextDue:"Today "+state.form.time,taken:false});
+    showToast("✓ Medication added");
+  }
+  save("ss:meds", state.meds);
+  setState({view:"meds", editMedId:null});
+}
+function addPerson() {
+  const name = state.newPersonName.trim();
+  if (!name) return;
+  if (state.people.includes(name)||state.pets.includes(name)) { showToast("Name already exists","error"); return; }
+  const color = EXTRA_COLORS[state.people.length % EXTRA_COLORS.length];
+  state.people.push(name);
+  state.colorMap[name] = color;
+  save("ss:people", state.people);
+  save("ss:colors", state.colorMap);
+  showToast("✓ "+name+" added");
+  setState({showAddPerson:false, newPersonName:""});
+}
+function removePerson(name) {
+  state.people = state.people.filter(p=>p!==name);
+  state.pets = state.pets.filter(p=>p!==name);
+  state.meds = state.meds.filter(m=>m.person!==name);
+  if (state.selectedPerson===name) state.selectedPerson="All";
+  save("ss:people", state.people);
+  save("ss:pets", state.pets);
+  save("ss:meds", state.meds);
+  showToast(name+" removed","info");
+  render();
+}
+function addFromScan() {
+  if (!state.scanResult) return;
+  const r = state.scanResult;
+  const person = state.selectedPerson==="All"?"Your Name":state.selectedPerson;
+  state.meds.push({id:Date.now(),person,name:r.name,dose:r.dose,frequency:r.directions||"Daily",time:"08:00",notes:`Prescriber: ${r.prescriber||""} | ${r.pharmacy||""}`,nextDue:"Today 8:00 AM",taken:false});
+  save("ss:meds", state.meds);
+  showToast("✓ Added from scan");
+  setState({view:"meds", scanResult:null, scanImagePreview:null});
+}
+
+// ── CLAUDE API ───────────────────────────────────────────────────────────────
+async function callClaude(messages, maxTokens=1200) {
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:maxTokens,messages})
+  });
+  const d = await r.json();
+  const text = (d.content||[]).find(b=>b.type==="text")?.text||"";
+  return JSON.parse(text.replace(/```json|```/g,"").trim());
+}
+
+async function handleImageUpload(file, mode) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    const base64 = ev.target.result.split(",")[1];
+    const mt = file.type;
+    if (mode==="scan") {
+      setState({scanImagePreview:ev.target.result, scanActive:true, scanResult:null, scanError:null});
+      try {
+        const result = await callClaude([{role:"user",content:[
+          {type:"image",source:{type:"base64",media_type:mt,data:base64}},
+          {type:"text",text:'Read this prescription label. Return ONLY JSON: {"name":"","dose":"","directions":"","prescriber":"","pharmacy":"","refills":"","ndc":"","patient":""}. Use "Not found" for missing fields.'}
+        ]}]);
+        setState({scanActive:false, scanResult:result});
+      } catch(e) {
+        setState({scanActive:false, scanError:"Couldn't read the label. Try a clearer photo."});
+      }
+    } else if (mode==="pill") {
+      setState({pillImage:ev.target.result, pillLoading:true, pillResult:null, pillError:null});
+      await runPillIdentify({type:"image",source:{type:"base64",media_type:mt,data:base64}});
+    } else if (mode==="doc") {
+      const person = state.docsPerson||state.people[0];
+      setState({docUploading:true});
+      try {
+        const cb = file.type==="application/pdf"
+          ? {type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}}
+          : {type:"image",source:{type:"base64",media_type:mt,data:base64}};
+        const result = await callClaude([{role:"user",content:[cb,{type:"text",text:'Analyze this medical document. Return ONLY JSON: {"title":"","type":"Lab Results|Doctor Report|Prescription|Imaging|Discharge Summary|Other","date":null,"summary":"","keyValues":[{"label":"","value":"","flag":"normal|low|high"}],"diagnoses":[],"medications":[],"followUp":null}'}]}], 1500);
+        const doc = {id:Date.now(),person,fileName:file.name,fileSize:Math.round(file.size/1024)+"KB",uploadDate:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),...result};
+        state.docs.unshift(doc);
+        save("ss:docs", state.docs);
+        showToast("✓ Document analyzed and saved");
+        setState({docUploading:false, docViewing:doc});
+      } catch(e) {
+        setState({docUploading:false});
+        showToast("Analysis failed — try again","error");
+      }
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runPillIdentify(imageBlock, imprint) {
+  const currentMeds = state.meds.map(m=>m.name).join(", ")||"none";
+  const content = [];
+  if (imageBlock) content.push(imageBlock);
+  content.push({type:"text",text:`${imageBlock?"Identify the pill in this photo.":"Identify pill with imprint: "+imprint} Current meds: ${currentMeds}. Return ONLY JSON: {"name":"","brandName":null,"strength":"","shape":"","color":"","imprint":"","category":"","usedFor":"","howItWorks":"","commonSideEffects":[],"seriousWarnings":[],"interactions":[{"drug":"","severity":"mild|moderate|severe","description":""}],"notes":null,"confidence":"high|medium|low"}`});
+  try {
+    const result = await callClaude([{role:"user",content}]);
+    if (!result.name) setState({pillLoading:false, pillError:"Couldn't identify. Try clearer photo or type the imprint code."});
+    else setState({pillLoading:false, pillResult:result});
+  } catch(e) {
+    setState({pillLoading:false, pillError:"Identification failed. Please try again."});
+  }
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────────────
+function render() {
+  const app = document.getElementById("app");
+  if (!app||!state.loaded) return;
+  app.innerHTML = buildApp();
+  attachEvents();
+}
+
+function buildApp() {
+  const filtered = getFiltered();
+  const taken = filtered.filter(m=>m.taken).length;
+  const pending = filtered.filter(m=>!m.taken).length;
+  const pct = filtered.length ? Math.round(taken/filtered.length*100) : 0;
+
+  const weekDays = Array.from({length:7},(_,i)=>{
+    const d = new Date(today); d.setDate(today.getDate()-today.getDay()+i); return d;
+  });
+
+  const toastHTML = state.toast ? `<div class="toast" style="background:${state.toast.type==="error"?"#8a4b3a":state.toast.type==="info"?"#4a5568":"#4a7c59"}">${state.toast.msg}</div>` : "";
+
+  return `
+${toastHTML}
+<header>
+  <div class="header-inner">
+    <div class="logo-area">
+      <img class="logo-img" src="${LOGO_SRC}" alt="ScriptSchedule"/>
+      <div>
+        <div class="logo-text">ScriptSchedule</div>
+        <div class="logo-sub">Scan · Schedule · Remind</div>
+      </div>
+    </div>
+    <div class="header-date">${today.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}</div>
+  </div>
+</header>
+
+<div class="people-section">
+  <div class="people-bar" style="flex-wrap:nowrap;overflow-x:auto;gap:8px;padding:8px 14px 4px">
+    ${state.people.map(p=>`
+      <div class="person-wrap">
+        <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="selectPerson" data-person="${p}">
+          <span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span>${p}
+        </button>
+        <button class="remove-btn" data-action="removePerson" data-person="${p}">×</button>
+      </div>`).join("")}
+  </div>
+  <div class="people-bar" style="flex-wrap:nowrap;overflow-x:auto;gap:8px;padding:4px 14px 8px;border-top:1px solid #2a2018">
+    <button class="person-btn ${state.selectedPerson==="All"?"active":""}" style="${state.selectedPerson==="All"?`background:#c9a66b;color:#1a1008`:""}" data-action="selectPerson" data-person="All">All</button>
+    <span style="font-size:11px;color:#5a4a43">🐾</span>
+    ${state.pets.map(p=>`
+      <div class="person-wrap">
+        <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="selectPerson" data-person="${p}">
+          <span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span>${p}
+        </button>
+        <button class="remove-btn" data-action="removePerson" data-person="${p}">×</button>
+      </div>`).join("")}
+    ${state.showAddPerson ? `
+      <div class="add-person-input">
+        <input class="person-name-input" id="newPersonInput" value="${state.newPersonName}" placeholder="Name..." />
+        <button class="confirm-btn" data-action="addPerson">✓</button>
+        <button class="cancel-btn" data-action="cancelAddPerson">×</button>
+      </div>` : `<button class="add-person-btn" data-action="showAddPerson">+ Add</button>`}
+  </div>
+</div>
+
+<div class="week-strip">
+  ${weekDays.map(d=>{
+    const isT = d.toDateString()===today.toDateString();
+    return `<div class="day-pill ${isT?"today":""}"><div class="day-name">${DAYS[d.getDay()]}</div><div class="day-num">${d.getDate()}</div></div>`;
+  }).join("")}
+</div>
+
+<nav>
+  ${[["dashboard","⊞","Home"],["meds","💊","Meds"],["scan","⬡","Scan"],["pill","🔍","ID Pill"],["docs","📁","Docs"],["emergency","🚨","SOS"],["report","📊","Report"]].map(([v,icon,label])=>`
+    <button class="nav-btn ${state.view===v?"active":""}" data-action="setView" data-view="${v}">
+      <span class="nav-icon">${icon}</span><span>${label}</span>
+    </button>`).join("")}
+</nav>
+
+<main>${buildView(filtered, taken, pending, pct, weekDays)}</main>`;
+}
+
+function buildView(filtered, taken, pending, pct, weekDays) {
+  switch(state.view) {
+    case "dashboard": return buildDashboard(filtered, taken, pending, pct);
+    case "meds": return buildMeds(filtered);
+    case "add": return buildAdd();
+    case "scan": return buildScan();
+    case "pill": return buildPill();
+    case "docs": return buildDocs();
+    case "emergency": return buildEmergency();
+    case "report": return buildReport(filtered);
+    case "schedule": return buildSchedule(filtered, weekDays);
+    default: return buildDashboard(filtered, taken, pending, pct);
+  }
+}
+
+function buildDashboard(filtered, taken, pending, pct) {
+  const upcoming = filtered.filter(m=>!m.taken).slice(0,3);
+  return `
+<div class="stat-row">
+  <div class="stat-card" style="border-color:#c9a66b"><div class="stat-num">${taken}</div><div class="stat-label">Taken Today</div></div>
+  <div class="stat-card" style="border-color:#8a4b3a"><div class="stat-num" style="color:${pending>0?"#e8a090":"#8c9e7a"}">${pending}</div><div class="stat-label">Pending</div></div>
+  <div class="stat-card" style="border-color:#6b8fad"><div class="stat-num">${state.meds.length}</div><div class="stat-label">Total Rx</div></div>
+</div>
+<div class="progress-card">
+  <div class="progress-label"><span>Daily Progress</span><span style="color:#c9a66b;font-weight:700">${taken}/${filtered.length}</span></div>
+  <div class="progress-track"><div class="progress-fill" style="width:${filtered.length?pct:0}%"></div></div>
+</div>
+<div class="section-header"><span>Upcoming Doses</span><button class="add-btn" data-action="openAdd">+ Add</button></div>
+${upcoming.map(m=>buildMedCard(m,true)).join("")}
+${upcoming.length===0?`<div class="empty-state">🎉 All caught up for today!</div>`:""}`;
+}
+
+function buildMeds(filtered) {
+  return `
+<div class="section-header"><span>All Medications</span><button class="add-btn" data-action="openAdd">+ Add New</button></div>
+${filtered.length===0?`<div class="empty-state">No medications yet. Add one!</div>`:""}
+${filtered.map(m=>buildMedCard(m,false)).join("")}`;
+}
+
+function buildMedCard(m, compact) {
+  const c = getColor(m.person);
+  return `
+<div class="med-card ${m.taken?"taken":""}" style="border-left-color:${c}">
+  <div class="med-card-top">
+    <div class="med-dot" style="background:${c}"></div>
+    <div style="flex:1">
+      <div class="med-name">${m.name}</div>
+      <div class="med-meta">${m.dose} · ${m.frequency}</div>
+      ${!compact&&m.notes?`<div class="med-notes">${m.notes}</div>`:""}
+    </div>
+    <div class="person-tag" style="background:${c}33;color:${c}">${m.person}</div>
+  </div>
+  <div class="med-next-due">⏰ ${m.nextDue}${m.taken?`<span class="taken-badge">✓ Taken</span>`:""}</div>
+  <div class="med-btns">
+    ${!m.taken?`<button class="btn-take" data-action="takeMed" data-id="${m.id}">✓ Take</button>`:""}
+    <button class="btn-edit" data-action="editMed" data-id="${m.id}">Edit</button>
+    <button class="btn-delete" data-action="deleteMed" data-id="${m.id}">Remove</button>
+  </div>
+</div>`;
+}
+
+function buildAdd() {
+  const f = state.form;
+  const freqs = ["Daily","Twice daily","Three times daily","Twice weekly","Weekly","As needed"];
+  return `
+<div class="section-header">
+  <button class="back-btn" data-action="setView" data-view="meds">← Back</button>
+  <span>${state.editMedId?"Edit Medication":"Add Medication"}</span>
+</div>
+<div class="form-card">
+  <div class="form-grid">
+    <label class="form-label">Person
+      <select class="form-input" id="f-person">
+        ${getAllPeople().map(p=>`<option ${f.person===p?"selected":""}>${p}</option>`).join("")}
+      </select>
+    </label>
+    <label class="form-label">Medication Name *
+      <input class="form-input" id="f-name" value="${f.name}" placeholder="e.g. Metformin"/>
+    </label>
+    <label class="form-label">Dosage *
+      <input class="form-input" id="f-dose" value="${f.dose}" placeholder="e.g. 500mg"/>
+    </label>
+    <label class="form-label">Frequency
+      <select class="form-input" id="f-freq">
+        ${freqs.map(o=>`<option ${f.frequency===o?"selected":""}>${o}</option>`).join("")}
+      </select>
+    </label>
+    <label class="form-label">Time
+      <input type="time" class="form-input" id="f-time" value="${f.time}"/>
+    </label>
+    <label class="form-label">Pharmacy
+      <input class="form-input" id="f-pharmacy" value="${f.pharmacy||""}" placeholder="CVS, Walgreens..."/>
+    </label>
+    <label class="form-label full">Notes
+      <textarea class="form-input" id="f-notes" placeholder="Special instructions...">${f.notes||""}</textarea>
+    </label>
+  </div>
+  <button class="submit-btn" data-action="submitForm">${state.editMedId?"Save Changes":"Add Medication"}</button>
+</div>`;
+}
+
+function buildScan() {
+  return `
+<div class="section-header"><span>Scan Prescription Label</span></div>
+<div class="scan-card">
+  <div class="scan-frame ${state.scanActive?"active":""}">
+    ${state.scanImagePreview?`<img class="scan-img" src="${state.scanImagePreview}"/>`:`<div class="scan-placeholder"><div class="icon">📋</div><div>Take a photo of your<br/>prescription label</div></div>`}
+    ${state.scanActive?`<div class="scan-overlay">Reading label with AI…</div>`:""}
+  </div>
+  <div class="scan-btn-row">
+    <label class="scan-btn">📷 Take Photo<input type="file" accept="image/*" capture="environment" style="display:none" data-upload="scan"/></label>
+    <label class="scan-btn secondary">🖼 Choose Image<input type="file" accept="image/*" style="display:none" data-upload="scan"/></label>
+  </div>
+  ${state.scanError?`<div class="error-box">⚠️ ${state.scanError}</div>`:""}
+  ${state.scanResult?`
+    <div class="scan-result-card">
+      <div class="scan-result-title">✓ Label Read Successfully</div>
+      ${[["Medication",state.scanResult.name],["Dose",state.scanResult.dose],["Directions",state.scanResult.directions],["Prescriber",state.scanResult.prescriber],["Pharmacy",state.scanResult.pharmacy],["Refills",state.scanResult.refills],["Patient",state.scanResult.patient]].filter(([,v])=>v&&v!=="Not found").map(([k,v])=>`<div class="scan-row"><span class="scan-key">${k}</span><span class="scan-val">${v}</span></div>`).join("")}
+      <button class="submit-btn" data-action="addFromScan" style="margin-top:14px">+ Add to My Medications</button>
+      <button class="scan-btn" style="margin-top:8px;font-size:13px" data-action="clearScan">Scan Another</button>
+    </div>`:""}
+  <div class="hint-text">Claude AI reads your label automatically. Works best with clear, well-lit photos.</div>
+</div>`;
+}
+
+function buildPill() {
+  return `
+<div class="section-header"><span>Pill Identifier</span></div>
+<div class="tab-switch">
+  <button class="tab-btn ${state.pillTab==="photo"?"active":""}" data-action="setPillTab" data-tab="photo">📷 Photo</button>
+  <button class="tab-btn ${state.pillTab==="imprint"?"active":""}" data-action="setPillTab" data-tab="imprint">⌨️ Imprint Code</button>
+</div>
+${state.pillTab==="photo"?`
+<div class="scan-card">
+  <div class="scan-frame ${state.pillLoading?"active":""}">
+    ${state.pillImage?`<img class="scan-img" src="${state.pillImage}"/>`:`<div class="scan-placeholder"><div class="icon">💊</div><div>Place pill on white surface<br/>and take a clear photo</div></div>`}
+    ${state.pillLoading?`<div class="scan-overlay">Identifying pill…</div>`:""}
+  </div>
+  <div class="scan-btn-row">
+    <label class="scan-btn">📷 Take Photo<input type="file" accept="image/*" capture="environment" style="display:none" data-upload="pill"/></label>
+    <label class="scan-btn secondary">🖼 Choose Image<input type="file" accept="image/*" style="display:none" data-upload="pill"/></label>
+  </div>
+  <div class="hint-text">Tip: Lay pill flat on white paper, show both sides if possible</div>
+</div>`:``}
+${state.pillTab==="imprint"?`
+<div class="scan-card">
+  <div style="font-size:13px;color:#d9c7b9;margin-bottom:12px;line-height:1.6">The imprint is the code stamped on the pill. Look for codes like <span style="color:#c9a66b;font-weight:600">L484</span>, <span style="color:#c9a66b;font-weight:600">M365</span>, or <span style="color:#c9a66b;font-weight:600">PLIVA 433</span>.</div>
+  <label class="form-label">Imprint Code
+    <input class="form-input" id="pillImprintInput" value="${state.pillImprint}" placeholder="e.g. L484" style="font-size:18px;letter-spacing:.1em;text-transform:uppercase"/>
+  </label>
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button class="submit-btn" data-action="identifyByImprint" style="margin-top:0;opacity:${state.pillImprint.trim()?1:.5}">${state.pillLoading?"Identifying…":"🔍 Identify Pill"}</button>
+  </div>
+</div>`:``}
+${state.pillError?`<div class="error-box" style="margin-top:12px">⚠️ ${state.pillError}</div>`:""}
+${state.pillResult?buildPillResult():""}`;
+}
+
+function buildPillResult() {
+  const r = state.pillResult;
+  const sevColor = {severe:"#e8a090",moderate:"#c9a66b",mild:"#8cc49a"};
+  return `
+<div style="margin-top:14px">
+  <div class="form-card" style="margin-bottom:12px;border-left:3px solid #c9a66b">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+      <div>
+        <div style="font-size:20px;font-weight:700;color:#f0e6d8">${r.name}</div>
+        ${r.brandName?`<div style="font-size:13px;color:#c9a66b;margin-top:2px">Brand: ${r.brandName}</div>`:""}
+      </div>
+      <span class="doc-type-badge" style="background:${r.confidence==="high"?"#2a4a34":"#3a3010"};color:${r.confidence==="high"?"#8cc49a":"#c9a66b"}">${r.confidence==="high"?"✓ High":r.confidence==="medium"?"~ Medium":"? Low"}</span>
+    </div>
+    <div class="pill-grid">
+      ${[["Strength",r.strength],["Shape",r.shape],["Color",r.color],["Imprint",r.imprint],["Category",r.category]].filter(([,v])=>v).map(([k,v])=>`<div class="pill-stat"><div class="pill-stat-label">${k}</div><div class="pill-stat-val">${v}</div></div>`).join("")}
+    </div>
+    <div style="margin-top:10px;font-size:13px;color:#d9c7b9;line-height:1.7"><span style="color:#c9a66b;font-weight:600">Used for: </span>${r.usedFor}</div>
+    ${r.howItWorks?`<div style="margin-top:6px;font-size:12px;color:#8a7a70;font-style:italic">${r.howItWorks}</div>`:""}
+  </div>
+  ${r.commonSideEffects?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">⚠️ Common Side Effects</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${r.commonSideEffects.map(s=>`<span class="tag">${s}</span>`).join("")}</div></div>`:""}
+  ${r.seriousWarnings?.length?`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #c04040"><div class="section-title-sm" style="color:#e8a090">🚨 Serious Warnings</div>${r.seriousWarnings.map(w=>`<div style="font-size:13px;color:#e8c0b0;padding:5px 0;border-bottom:1px solid #2a2018">• ${w}</div>`).join("")}</div>`:""}
+  ${r.interactions?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">⚡ Interactions with Your Meds</div>${r.interactions.map(ix=>`<div class="ix-row"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-weight:600;font-size:14px">${ix.drug}</span><span class="severity-badge" style="background:${sevColor[ix.severity]||"#8cc49a"}22;color:${sevColor[ix.severity]||"#8cc49a"}">${ix.severity}</span></div><div style="font-size:12px;color:#a08a7a">${ix.description}</div></div>`).join("")}</div>`:`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #8cc49a"><div style="font-size:13px;color:#8cc49a">✓ No known interactions with your current medications.</div></div>`}
+  <button class="submit-btn" data-action="addPillToMeds">+ Add to My Medications</button>
+  <button class="scan-btn" style="margin-top:8px;font-size:13px" data-action="clearPill">Identify Another</button>
+  <div class="hint-text" style="margin-top:10px">⚕️ For informational purposes only. Confirm with your pharmacist or doctor.</div>
+</div>`;
+}
+
+function buildDocs() {
+  const activePerson = state.docsPerson||state.people[0];
+  const personDocs = state.docs.filter(d=>d.person===activePerson);
+
+  if (state.docViewing && state.docViewing.person===activePerson) {
+    const doc = state.docViewing;
+    return `
+<div class="section-header">
+  <button class="back-btn" data-action="clearDocViewing">← Back</button>
+  <span style="font-size:13px">${doc.title}</span>
+</div>
+<div class="form-card" style="margin-bottom:12px;border-left:3px solid ${getColor(doc.person)}">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:6px">${doc.title}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <span class="doc-type-badge">${TYPE_ICONS[doc.type]||"📄"} ${doc.type}</span>
+        ${doc.date?`<span class="doc-type-badge" style="background:#261e16">${doc.date}</span>`:""}
+        <span class="doc-type-badge" style="background:#261e16">📎 ${doc.fileSize}</span>
+      </div>
+    </div>
+    <button class="btn-delete" style="flex:none;padding:6px 12px;font-size:12px;border-radius:10px" data-action="deleteDoc" data-id="${doc.id}">Remove</button>
+  </div>
+  <div style="font-size:13px;color:#d9c7b9;margin-top:10px;line-height:1.7;font-style:italic">${doc.summary}</div>
+</div>
+${doc.keyValues?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">🔬 Key Values</div>${doc.keyValues.map(kv=>`<div class="lab-row"><span class="lab-label">${kv.label}</span><span class="lab-value ${kv.flag&&kv.flag!=="normal"?"flag-"+kv.flag:""}">${kv.value}${kv.flag==="high"?" ↑":kv.flag==="low"?" ↓":""}</span></div>`).join("")}</div>`:""}
+${doc.diagnoses?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">🏥 Diagnoses</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${doc.diagnoses.map(d=>`<span class="diagnosis-tag">${d}</span>`).join("")}</div></div>`:""}
+${doc.medications?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">💊 Medications Mentioned</div>${doc.medications.map(m=>`<div style="font-size:13px;color:#d9c7b9;padding:5px 0;border-bottom:1px solid #2a2018">• ${m}</div>`).join("")}</div>`:""}
+${doc.followUp?`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #c9a66b"><div class="section-title-sm">📋 Follow-Up</div><div style="font-size:13px;color:#d9c7b9;margin-top:8px;line-height:1.7">${doc.followUp}</div></div>`:""}
+<div class="hint-text">Uploaded ${doc.uploadDate} · ${doc.fileName}</div>`;
+  }
+
+  return `
+<div class="section-header"><span>Medical Documents</span></div>
+<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px;padding-bottom:2px">
+  ${state.people.map(p=>`
+    <button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setDocsPerson" data-person="${p}">
+      <span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}
+      ${state.docs.filter(d=>d.person===p).length>0?`<span style="background:#c9a66b33;color:#c9a66b;border-radius:8px;padding:1px 6px;font-size:10px;margin-left:2px">${state.docs.filter(d=>d.person===p).length}</span>`:""}
+    </button>`).join("")}
+</div>
+<div class="doc-upload-area">
+  <div class="doc-upload-label">Add document for ${activePerson}</div>
+  <div class="doc-upload-row">
+    <label class="doc-upload-btn primary" style="opacity:${state.docUploading?.6:1}">
+      <span class="icon">📷</span><span style="font-size:13px">Take Photo</span><span style="font-size:10px;opacity:.7">Best for lab printouts</span>
+      <input type="file" accept="image/*" capture="environment" style="display:none" data-upload="doc" ${state.docUploading?"disabled":""}/>
+    </label>
+    <div style="display:flex;flex-direction:column;gap:8px;flex:1">
+      <label class="doc-upload-btn" style="flex:1">
+        <span>🖼</span><span>Gallery</span>
+        <input type="file" accept="image/*" style="display:none" data-upload="doc" ${state.docUploading?"disabled":""}/>
+      </label>
+      <label class="doc-upload-btn" style="flex:1">
+        <span>📄</span><span>PDF</span>
+        <input type="file" accept="application/pdf" style="display:none" data-upload="doc" ${state.docUploading?"disabled":""}/>
+      </label>
+    </div>
+  </div>
+  <div class="hint-text" style="margin-top:6px">📱 Tip: Screenshot your MyChart results and use Gallery</div>
+</div>
+${state.docUploading?`<div style="background:#261e16;border-radius:12px;padding:16px;text-align:center;margin-bottom:14px;border:1px solid #c9a66b44"><div style="font-size:28px;margin-bottom:8px">🤖</div><div style="color:#c9a66b;font-weight:600;font-size:14px">Claude is reading the document…</div><div style="color:#8a7a70;font-size:12px;margin-top:4px">Extracting lab values, diagnoses & summary</div></div>`:""}
+${personDocs.length===0&&!state.docUploading?`<div class="empty-state"><div style="font-size:36px;margin-bottom:8px">📂</div>No documents for ${activePerson} yet.</div>`:""}
+${personDocs.map(doc=>`
+  <button class="doc-card" style="border-left-color:${getColor(doc.person)}" data-action="viewDoc" data-id="${doc.id}">
+    <div style="display:flex;align-items:flex-start;gap:10px">
+      <div class="doc-icon">${TYPE_ICONS[doc.type]||"📄"}</div>
+      <div style="flex:1;text-align:left">
+        <div style="font-weight:700;font-size:14px;color:#f0e6d8">${doc.title}</div>
+        <div style="font-size:12px;color:#a08a7a;margin-top:2px">${doc.type} · ${doc.uploadDate}</div>
+        <div style="font-size:12px;color:#8a7a70;margin-top:4px">${doc.summary?.slice(0,90)}${doc.summary?.length>90?"…":""}</div>
+        ${doc.keyValues?.some(kv=>kv.flag==="high"||kv.flag==="low")?`<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${doc.keyValues.filter(kv=>kv.flag==="high"||kv.flag==="low").slice(0,3).map(kv=>`<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${FLAG_COLORS[kv.flag]}22;color:${FLAG_COLORS[kv.flag]};font-weight:600">${kv.label} ${kv.flag==="high"?"↑":"↓"}</span>`).join("")}</div>`:""}
+      </div>
+      <div style="color:#5a4a43;font-size:18px">›</div>
+    </div>
+  </button>`).join("")}`;
+}
+
+function buildEmergency() {
+  const activePerson = state.emergencyPerson||state.people[0];
+  const profile = state.emergencyProfiles[activePerson]||{};
+  const personMeds = state.meds.filter(m=>m.person===activePerson);
+
+  if (state.editingEmergency) {
+    const ef = state.emergencyForm;
+    return `
+<div class="emergency-header"><div style="font-size:22px">🚨</div><div><div style="font-weight:700;font-size:16px">Emergency Information</div><div style="font-size:11px;opacity:.8;letter-spacing:.1em">SHOW THIS TO FIRST RESPONDERS</div></div></div>
+<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px">
+  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="font-size:12px;padding:5px 12px;${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setEmergencyPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}</button>`).join("")}
+</div>
+<div class="form-card">
+  <div style="font-size:14px;font-weight:700;margin-bottom:12px">${activePerson} — Edit Emergency Info</div>
+  <div class="form-grid">
+    ${[["blood","Blood Type","e.g. O+"],["dob","Date of Birth","e.g. March 15, 1978"],["weight","Weight","e.g. 145 lbs"],["doctor","Primary Doctor","e.g. Dr. Shah"],["doctorPhone","Doctor Phone",""],["emergency","Emergency Contact",""],["emergencyPhone","Emergency Phone",""]].map(([k,label,ph])=>`
+    <label class="form-label">${label}<input class="form-input" id="ef-${k}" value="${ef[k]||""}" placeholder="${ph}"/></label>`).join("")}
+    <label class="form-label full">Allergies (comma separated)<input class="form-input" id="ef-allergies" value="${ef.allergies||""}" placeholder="e.g. Penicillin, Latex"/></label>
+    <label class="form-label full">Medical Conditions<textarea class="form-input" id="ef-conditions">${ef.conditions||""}</textarea></label>
+  </div>
+  <div style="display:flex;gap:10px;margin-top:4px">
+    <button class="submit-btn" data-action="saveEmergency" style="flex:1">Save</button>
+    <button class="btn-edit" style="flex:0 0 80px;border-radius:12px;padding:13px" data-action="cancelEmergencyEdit">Cancel</button>
+  </div>
+</div>`;
+  }
+
+  return `
+<div class="emergency-header"><div style="font-size:22px">🚨</div><div><div style="font-weight:700;font-size:16px">Emergency Information</div><div style="font-size:11px;opacity:.8;letter-spacing:.1em">SHOW THIS TO FIRST RESPONDERS</div></div></div>
+<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px">
+  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="font-size:12px;padding:5px 12px;${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setEmergencyPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}</button>`).join("")}
+</div>
+<div class="emergency-card">
+  <div class="section-title-sm">Vitals</div>
+  <div class="emergency-grid">
+    ${[["🩸 Blood Type",profile.blood],["🎂 Date of Birth",profile.dob],["⚖️ Weight",profile.weight]].map(([k,v])=>`<div class="emergency-stat"><div style="font-size:10px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">${k}</div><div style="font-size:15px;font-weight:700">${v||`<span style="color:#5a4a43">Not set</span>`}</div></div>`).join("")}
+  </div>
+</div>
+<div class="emergency-card">
+  <div class="section-title-sm">⚠️ Allergies</div>
+  ${profile.allergies?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${profile.allergies.split(",").map(a=>a.trim()).filter(Boolean).map(a=>`<span class="allergy-tag">${a}</span>`).join("")}</div>`:`<div style="color:#5a4a43;font-size:13px;margin-top:6px">No allergies recorded</div>`}
+</div>
+<div class="emergency-card">
+  <div class="section-title-sm">💊 Current Medications</div>
+  ${personMeds.length===0?`<div style="color:#5a4a43;font-size:13px;margin-top:6px">No medications on file</div>`:""}
+  ${personMeds.map(m=>`<div class="emergency-med-row"><div class="med-dot" style="background:${getColor(m.person)};margin-top:4px"></div><div><div style="font-weight:600;font-size:14px">${m.name} · ${m.dose}</div><div style="color:#a08a7a;font-size:12px">${m.frequency}</div></div></div>`).join("")}
+</div>
+${profile.conditions?`<div class="emergency-card"><div class="section-title-sm">🏥 Medical Conditions</div><div style="font-size:13px;color:#d9c7b9;margin-top:6px;line-height:1.6">${profile.conditions}</div></div>`:""}
+<div class="emergency-card">
+  <div class="section-title-sm">📞 Contacts</div>
+  ${[["Primary Doctor",profile.doctor,profile.doctorPhone],["Emergency Contact",profile.emergency,profile.emergencyPhone]].map(([label,name,phone])=>`<div style="margin-top:8px"><div style="font-size:11px;color:#8a7a70;text-transform:uppercase;letter-spacing:.05em">${label}</div><div style="font-size:14px;font-weight:600">${name||`<span style="color:#5a4a43">Not set</span>`}</div>${phone?`<div style="font-size:13px;color:#c9a66b">${phone}</div>`:""}</div>`).join("")}
+</div>
+<button class="add-btn" style="width:100%;padding:12px;border-radius:12px;font-size:14px;margin-top:4px" data-action="startEditEmergency">✏️ Edit ${activePerson}'s Info</button>`;
+}
+
+function buildReport(filtered) {
+  const activePerson = state.reportPerson||state.people[0];
+  const personMeds = state.meds.filter(m=>m.person===activePerson);
+  const takenMeds = personMeds.filter(m=>m.taken);
+  const adherencePct = personMeds.length?Math.round(takenMeds.length/personMeds.length*100):0;
+  const ep = state.emergencyProfiles[activePerson]||{};
+
+  return `
+<div class="report-header">
+  <div><div style="font-weight:700;font-size:16px">Adherence Report</div><div style="font-size:11px;color:#c9a66b;letter-spacing:.1em;margin-top:2px">GENERATED ${today.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}).toUpperCase()}</div></div>
+  <div style="font-size:28px">📊</div>
+</div>
+<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px">
+  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="font-size:12px;padding:5px 12px;${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setReportPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}</button>`).join("")}
+</div>
+<div class="range-btns">
+  ${[["7","7 Days"],["30","30 Days"],["90","90 Days"]].map(([v,l])=>`<button class="range-btn ${state.reportRange===v?"active":""}" data-action="setReportRange" data-range="${v}">${l}</button>`).join("")}
+</div>
+<div class="stat-row">
+  <div class="stat-card" style="border-color:#c9a66b"><div class="stat-num">${takenMeds.length}</div><div class="stat-label">Taken</div></div>
+  <div class="stat-card" style="border-color:#8a4b3a"><div class="stat-num" style="color:#e8a090">${personMeds.length-takenMeds.length}</div><div class="stat-label">Missed</div></div>
+  <div class="stat-card" style="border-color:#8c9e7a"><div class="stat-num" style="color:${adherencePct>=80?"#8cc49a":"#e8a090"}">${adherencePct}%</div><div class="stat-label">Adherence</div></div>
+</div>
+<div class="progress-card">
+  <div class="progress-label"><span>Overall — ${activePerson}</span><span style="color:${adherencePct>=80?"#8cc49a":"#e8a090"};font-weight:700">${adherencePct}%</span></div>
+  <div class="progress-track"><div class="progress-fill" style="width:${adherencePct}%;background:${adherencePct>=80?"linear-gradient(90deg,#8c9e7a,#adc49a)":"linear-gradient(90deg,#c9a66b,#e8c87a)"}"></div></div>
+</div>
+<div class="form-card" style="margin-bottom:14px">
+  <div style="font-weight:700;font-size:14px;margin-bottom:12px">Medication Breakdown</div>
+  ${personMeds.length===0?`<div style="color:#5a4a43;font-size:13px">No medications on file</div>`:""}
+  ${personMeds.map(med=>{
+    const pct2=med.taken?100:0; const c=getColor(med.person);
+    return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px"><span style="font-weight:600">${med.name} <span style="color:#8a7a70;font-weight:400">· ${med.dose}</span></span><span style="color:${c};font-weight:700">${pct2}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct2}%;background:${c}"></div></div><div style="font-size:11px;color:#8a7a70;margin-top:3px">${med.frequency} · ${med.taken?"✓ Taken today":"⏳ Pending today"}</div></div>`;
+  }).join("")}
+</div>
+<div class="form-card">
+  <div style="font-weight:700;font-size:14px;margin-bottom:8px">📝 Notes for Provider</div>
+  <div style="font-size:13px;color:#d9c7b9;line-height:1.7">${adherencePct>=90?`${activePerson} shows excellent medication adherence at ${adherencePct}%. No concerns noted.`:adherencePct>=70?`${activePerson} shows good overall adherence at ${adherencePct}%. Some missed doses recorded.`:`${activePerson}'s adherence rate of ${adherencePct}% is below target. Consider discussing barriers at next visit.`}</div>
+  ${ep.allergies?`<div style="margin-top:10px;padding:8px 10px;background:#3a1a14;border-radius:8px;font-size:12px;color:#e8a090">⚠️ Allergies on file: ${ep.allergies}</div>`:""}
+</div>
+
+<div style="margin-top:20px;padding:16px;background:#1a1208;border-radius:14px;border:1px solid #3a2e24;text-align:center">
+  <div style="font-size:12px;color:#5a4a43;margin-bottom:10px;letter-spacing:.05em;text-transform:uppercase">App Settings</div>
+  <button data-action="resetApp" style="background:#3a1a14;color:#e8a090;border:1px solid #7a2a20;border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">🗑️ Reset App — Clear All Data & Start Fresh</button>
+  <div style="font-size:11px;color:#4a3a34;margin-top:8px;line-height:1.5">Removes all medications, family members and saved data.<br>Use this to start fresh or share with a new user.</div>
+</div>
+
+<div style="margin-top:16px;border-radius:14px;overflow:hidden;border:1px solid rgba(201,166,107,0.25)">
+  <div style="background:linear-gradient(135deg,#2a1f14,#1e1610);padding:14px 16px;border-bottom:1px solid rgba(201,166,107,0.15);display:flex;align-items:center;gap:10px">
+    <span style="font-size:18px">🔒</span>
+    <div>
+      <div style="font-size:13px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif">Privacy & Security</div>
+      <div style="font-size:11px;color:#a0896e;margin-top:1px">How we protect your family's health data</div>
+    </div>
+  </div>
+
+  <div style="background:#1a1208;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:rgba(201,166,107,0.06);border-radius:10px;border:1px solid rgba(201,166,107,0.12)">
+      <span style="font-size:20px;flex-shrink:0">🔒</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;margin-bottom:3px">Encrypted & Secure</div>
+        <div style="font-size:12px;color:#a0896e;line-height:1.6">Your data is encrypted and stored securely. Nobody else can read your family's records — not even us.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:rgba(201,166,107,0.06);border-radius:10px;border:1px solid rgba(201,166,107,0.12)">
+      <span style="font-size:20px;flex-shrink:0">👁️</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;margin-bottom:3px">Only You Can See It</div>
+        <div style="font-size:12px;color:#a0896e;line-height:1.6">Your prescription information is locked to your account. Only your family sees it — no one else, ever.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:rgba(201,166,107,0.06);border-radius:10px;border:1px solid rgba(201,166,107,0.12)">
+      <span style="font-size:20px;flex-shrink:0">🚫</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;margin-bottom:3px">Never Sold. Ever.</div>
+        <div style="font-size:12px;color:#a0896e;line-height:1.6">We don't sell your health data. Not to advertisers, not to data brokers, not to anyone. Full stop.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:rgba(201,166,107,0.06);border-radius:10px;border:1px solid rgba(201,166,107,0.12)">
+      <span style="font-size:20px;flex-shrink:0">📱</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;margin-bottom:3px">Biometric Lock</div>
+        <div style="font-size:12px;color:#a0896e;line-height:1.6">Face ID and Touch ID supported. Your health dashboard stays locked until it's you opening it.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:rgba(201,166,107,0.06);border-radius:10px;border:1px solid rgba(201,166,107,0.12)">
+      <span style="font-size:20px;flex-shrink:0">📷</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;margin-bottom:3px">We Scan the Label. Not Your Cabinet.</div>
+        <div style="font-size:12px;color:#a0896e;line-height:1.6">When you scan a prescription, we read the label and save only the details — medication name, dosage, and schedule. The raw image is never stored on our servers.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="background:#161008;padding:12px 16px;text-align:center;border-top:1px solid rgba(201,166,107,0.1)">
+    <div style="font-size:12px;color:#6a5a50;font-style:italic;line-height:1.6;font-family:Georgia,serif">"Your family's prescription information never leaves your account.<br>We don't sell it, share it, or use it for advertising. Ever."</div>
+    <div style="font-size:10px;color:#4a3a34;margin-top:6px;letter-spacing:.06em;text-transform:uppercase">— ScriptSchedule Privacy Promise</div>
+  </div>
+</div>`;
+}
+
+function buildSchedule(filtered, weekDays) {
+  return `
+<div class="section-header"><span>Weekly Schedule</span></div>
+${weekDays.map((d,i)=>{
+  const isT=d.toDateString()===today.toDateString();
+  const dayMeds=filtered.filter(m=>m.frequency==="Daily"||(m.frequency==="Twice weekly"&&i%3===0));
+  return `<div class="schedule-day" style="${isT?"border-left-color:#c9a66b":""}">
+    <div class="schedule-day-header">
+      <span style="font-weight:${isT?700:400};color:${isT?"#c9a66b":"#d9c7b9"}">${DAYS[d.getDay()]} ${d.getDate()}</span>
+      ${isT?`<span class="today-badge">Today</span>`:""}
+    </div>
+    ${dayMeds.length===0?`<div style="color:#7a6a62;font-size:13px;padding:4px 0">No scheduled medications</div>`:""}
+    ${dayMeds.map(med=>`<div class="schedule-med-row"><div style="width:8px;height:8px;border-radius:50%;background:${getColor(med.person)};flex-shrink:0"></div><div><div style="font-weight:600;font-size:14px">${med.name} · ${med.dose}</div><div style="color:#d9c7b9;font-size:12px">${med.time} · ${med.person}</div></div>${isT&&med.taken?`<span class="taken-badge" style="margin-left:auto">✓</span>`:""}</div>`).join("")}
+  </div>`;
+}).join("")}`;
+}
+
+// ── EVENTS ───────────────────────────────────────────────────────────────────
+function attachEvents() {
+  // Data-action buttons
+  document.querySelectorAll("[data-action]").forEach(el => {
+    el.addEventListener("click", handleAction);
+  });
+  // File upload inputs
+  document.querySelectorAll("[data-upload]").forEach(el => {
+    el.addEventListener("change", e => {
+      handleImageUpload(e.target.files[0], e.target.dataset.upload);
+    });
+  });
+  // Live form fields
+  const np = document.getElementById("newPersonInput");
+  if (np) {
+    np.addEventListener("input", e => state.newPersonName = e.target.value);
+    np.addEventListener("keydown", e => { if(e.key==="Enter") addPerson(); if(e.key==="Escape") setState({showAddPerson:false,newPersonName:""}); });
+    np.focus();
+  }
+  const pi = document.getElementById("pillImprintInput");
+  if (pi) {
+    pi.addEventListener("input", e => { state.pillImprint = e.target.value.toUpperCase(); pi.value = state.pillImprint; });
+    pi.addEventListener("keydown", e => { if(e.key==="Enter") identifyByImprint(); });
+  }
+}
+
+function handleAction(e) {
+  const el = e.currentTarget;
+  const action = el.dataset.action;
+  switch(action) {
+    case "setView": setState({view:el.dataset.view, docViewing:null}); break;
+    case "selectPerson": setState({selectedPerson:el.dataset.person}); break;
+    case "removePerson": removePerson(el.dataset.person); break;
+    case "showAddPerson": setState({showAddPerson:true}); break;
+    case "addPerson": addPerson(); break;
+    case "cancelAddPerson": setState({showAddPerson:false,newPersonName:""}); break;
+    case "resetApp": {
+      if (confirm("Reset all app data? This clears all medications, family members and settings.")) {
+        ["ss:meds","ss:people","ss:pets","ss:colors","ss:emergency","ss:docs","ss-td"].forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});
+        showToast("✓ App reset — reloading...");
+        setTimeout(()=>location.reload(),1200);
+      }
+      break;
+    }
+    case "openAdd": openAdd(); break;
+    case "takeMed": takeMed(parseInt(el.dataset.id)); break;
+    case "editMed": openEdit(state.meds.find(m=>m.id===parseInt(el.dataset.id))); break;
+    case "deleteMed": deleteMed(parseInt(el.dataset.id)); break;
+    case "submitForm": readFormAndSubmit(); break;
+    case "addFromScan": addFromScan(); break;
+    case "clearScan": setState({scanResult:null,scanImagePreview:null,scanError:null}); break;
+    case "setPillTab": setState({pillTab:el.dataset.tab,pillResult:null,pillError:null,pillImage:null,pillImprint:""}); break;
+    case "identifyByImprint": identifyByImprint(); break;
+    case "clearPill": setState({pillResult:null,pillImage:null,pillImprint:"",pillError:null}); break;
+    case "addPillToMeds": {
+      const r=state.pillResult;
+      state.form={person:state.selectedPerson==="All"?"Your Name":state.selectedPerson,name:r.name+(r.strength?" "+r.strength:""),dose:r.strength||"",frequency:"Daily",time:"08:00",notes:`Identified via pill lookup. ${r.usedFor}`,pharmacy:""};
+      setState({view:"add",editMedId:null});
+      break;
+    }
+    case "setDocsPerson": setState({docsPerson:el.dataset.person,docViewing:null}); break;
+    case "viewDoc": setState({docViewing:state.docs.find(d=>d.id===parseInt(el.dataset.id))}); break;
+    case "clearDocViewing": setState({docViewing:null}); break;
+    case "deleteDoc": {
+      state.docs=state.docs.filter(d=>d.id!==parseInt(el.dataset.id));
+      save("ss:docs",state.docs);
+      showToast("Document removed","info");
+      setState({docViewing:null});
+      break;
+    }
+    case "setEmergencyPerson": setState({emergencyPerson:el.dataset.person,editingEmergency:false}); break;
+    case "startEditEmergency": {
+      const p=state.emergencyPerson||state.people[0];
+      setState({editingEmergency:true,emergencyForm:{...(state.emergencyProfiles[p]||{})}});
+      break;
+    }
+    case "saveEmergency": saveEmergency(); break;
+    case "cancelEmergencyEdit": setState({editingEmergency:false}); break;
+    case "setReportPerson": setState({reportPerson:el.dataset.person}); break;
+    case "setReportRange": setState({reportRange:el.dataset.range}); break;
+  }
+}
+
+function readFormAndSubmit() {
+  state.form.person = document.getElementById("f-person")?.value || state.form.person;
+  state.form.name = document.getElementById("f-name")?.value || "";
+  state.form.dose = document.getElementById("f-dose")?.value || "";
+  state.form.frequency = document.getElementById("f-freq")?.value || "Daily";
+  state.form.time = document.getElementById("f-time")?.value || "08:00";
+  state.form.pharmacy = document.getElementById("f-pharmacy")?.value || "";
+  state.form.notes = document.getElementById("f-notes")?.value || "";
+  submitForm();
+}
+
+function saveEmergency() {
+  const p = state.emergencyPerson||state.people[0];
+  const fields = ["blood","dob","weight","doctor","doctorPhone","emergency","emergencyPhone","allergies","conditions"];
+  fields.forEach(k => {
+    const el = document.getElementById("ef-"+k);
+    if (el) state.emergencyForm[k] = el.value;
+  });
+  state.emergencyProfiles[p] = {...state.emergencyForm};
+  save("ss:emergency", state.emergencyProfiles);
+  showToast("✓ Emergency info saved");
+  setState({editingEmergency:false});
+}
+
+function identifyByImprint() {
+  const val = document.getElementById("pillImprintInput")?.value||state.pillImprint;
+  if (!val.trim()) return;
+  state.pillImprint = val.trim().toUpperCase();
+  setState({pillLoading:true,pillResult:null,pillError:null,pillImage:null});
+  runPillIdentify(null, state.pillImprint);
+}
+
+// ── START ────────────────────────────────────────────────────────────────────
+window.addEventListener("load", init);
+
+// ── SERVICE WORKER ───────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(console.warn);
+}
+
+// ── INSTALL BANNER ───────────────────────────────────────────────────────────
+(function() {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  let installPrompt = null;
+
+  // Clear any old dismissal so banner always shows
+  localStorage.removeItem('ss-ib');
+
+  function showBanner() {
+    document.getElementById('install-banner').classList.add('show');
+  }
+  window.dismissInstallBanner = function() {
+    document.getElementById('install-banner').classList.remove('show');
+  };
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    installPrompt = e;
+    if (!isStandalone) setTimeout(showBanner, 1000);
+  });
+
+  document.getElementById('btn-install').addEventListener('click', async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    installPrompt = null;
+    if (outcome === 'accepted') window.dismissInstallBanner();
+  });
+
+  if (isIOS && !isStandalone) {
+    document.getElementById('android-section').style.display = 'none';
+    document.getElementById('ios-steps').style.display = 'flex';
+    setTimeout(showBanner, 1000);
+  }
+})();
+</script>
+
+<!-- INSTALL BANNER -->
+<div id="install-banner">
+  <button class="ib-close" onclick="dismissInstallBanner()">×</button>
+  <div class="ib-top">
+    <div class="ib-icon"><img src="/icon-192.png" alt="ScriptSchedule"></div>
+    <div class="ib-words">
+      <h3>Add ScriptSchedule to your Home Screen</h3>
+      <p>Works like a real app — free, no App Store needed</p>
+    </div>
+  </div>
+  <div id="android-section">
+    <button id="btn-install">&#11015; Add to Home Screen</button>
+  </div>
+  <div id="ios-steps">
+    <div class="ios-step"><span class="snum">1</span><span class="sico">&#11014;&#65039;</span><span class="stxt">Tap the <b>Share</b> button at the bottom of Safari</span></div>
+    <div class="ios-step"><span class="snum">2</span><span class="sico">&#10133;</span><span class="stxt">Scroll and tap <b>Add to Home Screen</b></span></div>
+    <div class="ios-step"><span class="snum">3</span><span class="sico">&#9989;</span><span class="stxt">Tap <b>Add</b> in the top right — you're done!</span></div>
+  </div>
+</div>
+
+
+<!-- TUTORIAL -->
+<div id="tut">
+  <div class="tut-box">
+    <h2>Welcome to ScriptSchedule</h2>
+    <p>Your family prescription manager. Get started in 3 steps.</p>
+    <div class="tut-steps">
+      <div class="tut-step"><div class="tut-n">1</div><div class="tut-t"><b>Add your family</b> — tap <b>+ Add</b> at the top to replace the placeholder names with your real family members.</div></div>
+      <div class="tut-step"><div class="tut-n">2</div><div class="tut-t"><b>Add medications</b> — tap <b>Meds</b> then <b>+ Add Med</b> to enter each person's prescriptions.</div></div>
+      <div class="tut-step"><div class="tut-n">3</div><div class="tut-t"><b>Install on your phone</b> — use the banner at the bottom to add this to your home screen like a real app.</div></div>
+    </div>
+    <button class="tut-go" onclick="document.getElementById('tut').classList.remove('show');try{localStorage.setItem('ss-td','1')}catch(e){}">Got it — Let's start →</button>
+    <button class="tut-skip" onclick="document.getElementById('tut').classList.remove('show');try{localStorage.setItem('ss-td','1')}catch(e){}">Skip</button>
+  </div>
+</div>
+<script>
+window.addEventListener('load',function(){
+  setTimeout(function(){
+    try{if(!localStorage.getItem('ss-td'))document.getElementById('tut').classList.add('show');}catch(e){}
+  },1800);
+});
+function openTutorial(){document.getElementById('tut').classList.add('show');}
+</script>
+</body>
+</html>
