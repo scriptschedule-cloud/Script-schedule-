@@ -1,4 +1,4 @@
-const CACHE = 'scriptschedule-v3';
+const CACHE = 'scriptschedule-v4';
 const CORE  = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', e => {
