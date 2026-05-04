@@ -8,7 +8,12 @@
 <meta name="apple-mobile-web-app-title" content="ScriptSchedule"/>
 <meta name="theme-color" content="#1e1610"/>
 <link rel="manifest" href="/manifest.json">
-<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="apple-touch-icon" sizes="152x152" href="/icon-152.png">
+<link rel="apple-touch-icon" sizes="167x167" href="/icon-167.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png">
 <title>ScriptSchedule</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -23,7 +28,7 @@ html,body{background:#1e1610;color:#f0e6d8;font-family:Georgia,'Times New Roman'
 #install-banner{position:fixed;bottom:0;left:0;right:0;background:#2a1f14;border-top:2px solid #c9a66b;padding:18px 18px 36px;z-index:99999;transform:translateY(110%);transition:transform .45s cubic-bezier(.34,1.4,.64,1);box-shadow:0 -12px 48px rgba(0,0,0,.7)}
 #install-banner.show{transform:translateY(0)}
 .ib-top{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px}
-.ib-icon{width:50px;height:50px;border-radius:13px;overflow:hidden;flex-shrink:0;box-shadow:0 4px 16px rgba(201,166,107,.3)}
+.ib-icon{width:50px;height:50px;border-radius:13px;overflow:hidden;flex-shrink:0;box-shadow:0 4px 16px rgba(201,166,107,.3);background:#c9a66b;display:flex;align-items:center;justify-content:center;color:#1a1008;font-weight:700;font-size:18px;font-family:Georgia,serif}
 .ib-icon img{width:100%;height:100%;object-fit:cover}
 .ib-words h3{font-size:16px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;line-height:1.3}
 .ib-words p{font-size:12px;color:#a0896e;margin-top:3px;font-family:Georgia,serif}
@@ -48,19 +53,29 @@ header{background:linear-gradient(135deg,#1a1008,#2a1f14);border-bottom:1px soli
 .header-date{font-size:13px;color:#a08a7a;font-style:italic}
 
 /* PEOPLE BAR */
-.people-section{background:#1a1208;border-bottom:1px solid #2a2018}
-.people-bar{display:flex;gap:6px 8px;padding:8px 14px;flex-wrap:wrap;align-items:center;}
-.people-bar::-webkit-scrollbar{display:none}
-.person-wrap{position:relative;display:flex;align-items:center;flex-shrink:0}
-.person-btn{display:flex;align-items:center;gap:6px;border:1px solid #3a2e24;border-radius:20px;padding:6px 14px;background:transparent;color:#d9c7b9;cursor:pointer;white-space:nowrap;font-size:13px;font-family:Georgia,serif}
+.people-section{background:#1a1208;border-bottom:1px solid #2a2018;padding:10px 14px}
+.people-all-row{display:flex;justify-content:center;margin-bottom:10px}
+.people-all-btn{display:flex;align-items:center;gap:8px;border:1.5px solid #c9a66b;border-radius:22px;padding:7px 22px;background:transparent;color:#c9a66b;cursor:pointer;font-size:14px;font-weight:600;font-family:Georgia,serif;letter-spacing:.04em;text-transform:uppercase}
+.people-all-btn.active{background:#c9a66b;color:#1a1008}
+.people-group-label{font-size:10px;color:#7a6a5a;letter-spacing:.12em;text-transform:uppercase;margin:8px 0 6px;padding-left:2px;font-weight:700}
+.people-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.person-wrap{position:relative;display:flex;align-items:center;width:100%}
+.person-btn{display:flex;align-items:center;gap:6px;border:1px solid #3a2e24;border-radius:18px;padding:7px 10px;background:transparent;color:#d9c7b9;cursor:pointer;font-size:12px;font-family:Georgia,serif;width:100%;justify-content:flex-start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .person-btn.active{font-weight:700}
 .avatar{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#1a1008;flex-shrink:0}
-.remove-btn{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#5a2a1a;color:#e8a090;border:none;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
-.add-person-btn{border:1px dashed #5a4a43;border-radius:20px;padding:6px 12px;background:transparent;color:#8a7a70;cursor:pointer;white-space:nowrap;font-size:13px;font-family:Georgia,serif;flex-shrink:0}
-.add-person-input{display:flex;align-items:center;gap:4px;flex-shrink:0}
-.person-name-input{padding:5px 10px;border-radius:20px;border:1px solid #c9a66b;background:#1e1610;color:#f0e6d8;font-size:13px;width:90px;outline:none;font-family:Georgia,serif}
-.confirm-btn{background:#4a7c59;color:#fff;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px}
-.cancel-btn{background:#5a2a1a;color:#e8a090;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:13px}
+.person-name-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.remove-btn{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#5a2a1a;color:#e8a090;border:none;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;z-index:2}
+.add-person-btn{border:1px dashed #5a4a43;border-radius:18px;padding:7px 10px;background:transparent;color:#8a7a70;cursor:pointer;font-size:12px;font-family:Georgia,serif;width:100%;text-align:center}
+.add-person-input{display:flex;align-items:center;gap:4px;width:100%}
+.person-name-input{padding:5px 8px;border-radius:18px;border:1px solid #c9a66b;background:#1e1610;color:#f0e6d8;font-size:12px;width:100%;min-width:0;outline:none;font-family:Georgia,serif}
+.confirm-btn{background:#4a7c59;color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;flex-shrink:0}
+.cancel-btn{background:#5a2a1a;color:#e8a090;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;flex-shrink:0}
+
+/* INLINE PERSON PICKER (used inside Docs/Emergency/Report) */
+.inline-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px}
+.inline-picker .person-btn{font-size:12px;padding:6px 10px;width:100%;justify-content:flex-start}
+.inline-picker .person-btn .avatar{width:18px;height:18px;font-size:9px}
+.inline-picker .person-btn .doc-count{background:#c9a66b33;color:#c9a66b;border-radius:8px;padding:1px 6px;font-size:10px;margin-left:auto;flex-shrink:0}
 
 /* NAV */
 nav{display:flex;background:#1a1208;overflow-x:auto;scrollbar-width:none;position:fixed;bottom:0;left:0;right:0;z-index:60;border-top:1px solid #3a2e24;box-shadow:0 -4px 24px rgba(0,0,0,.5);max-width:480px;margin:0 auto}
@@ -182,6 +197,56 @@ textarea.form-input{min-height:72px;resize:vertical}
 #loading img{width:64px;height:64px;border-radius:16px}
 #loading p{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:#c9a66b;opacity:.8}
 
+/* ── BETA GATE ── */
+#beta-gate{position:fixed;inset:0;background:#1e1610;display:none;flex-direction:column;align-items:center;justify-content:center;padding:30px 24px;z-index:10000;overflow-y:auto}
+#beta-gate.show{display:flex}
+.bg-inner{max-width:380px;width:100%;text-align:center;animation:fadeIn .4s ease}
+.bg-logo{width:72px;height:72px;border-radius:18px;margin:0 auto 22px;box-shadow:0 4px 24px rgba(201,166,107,.25)}
+.bg-title{font-size:26px;font-weight:700;color:#f0e6d8;letter-spacing:-.02em;margin-bottom:8px;line-height:1.2}
+.bg-sub{font-size:14px;color:#c9a66b;letter-spacing:.12em;text-transform:uppercase;margin-bottom:20px}
+.bg-text{font-size:15px;color:#a08a7a;line-height:1.6;margin-bottom:28px;font-style:italic}
+.bg-input{width:100%;background:#2a1f14;border:1.5px solid #3d2e1a;border-radius:12px;padding:16px 18px;font-size:16px;color:#f0e6d8;font-family:Georgia,serif;outline:none;margin-bottom:14px;text-align:center;letter-spacing:.05em}
+.bg-input:focus{border-color:#c9a66b;background:#2f2418}
+.bg-input::placeholder{color:#5a4a3a}
+.bg-btn{width:100%;background:#c9a66b;color:#1a1008;border:none;border-radius:12px;padding:16px;font-size:16px;font-weight:700;font-family:Georgia,serif;cursor:pointer;letter-spacing:.02em;margin-top:8px}
+.bg-btn:active{background:#b8954f;transform:scale(.98)}
+.bg-btn:disabled{background:#5a4a3a;color:#8a7a6a;cursor:not-allowed;transform:none}
+.bg-error{font-size:13px;color:#e8a090;margin-top:14px;min-height:18px;font-style:italic}
+.bg-footer{font-size:12px;color:#5a4a3a;margin-top:24px;line-height:1.5}
+.bg-footer a{color:#8a7a6a;text-decoration:underline}
+.bg-role-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px}
+.bg-role-btn{background:#2a1f14;border:1.5px solid #3d2e1a;border-radius:12px;padding:14px 16px;font-size:14px;color:#f0e6d8;font-family:Georgia,serif;cursor:pointer;text-align:left;display:flex;align-items:center;gap:12px;transition:all .15s ease}
+.bg-role-btn:hover,.bg-role-btn.selected{border-color:#c9a66b;background:#2f2418}
+.bg-role-btn.selected{box-shadow:0 0 0 1px #c9a66b inset}
+.bg-role-icon{font-size:22px;flex-shrink:0;width:28px;text-align:center}
+.bg-role-label{flex:1;line-height:1.3}
+.bg-role-label b{display:block;color:#c9a66b;font-size:13px;font-weight:700;margin-bottom:1px}
+.bg-role-sub{font-size:12px;color:#8a7a6a;font-style:italic}
+
+/* ── BETA FEEDBACK BUTTON ── */
+#fb-btn{position:fixed;bottom:78px;right:14px;width:52px;height:52px;border-radius:50%;background:#c9a66b;color:#1a1008;border:2px solid #1e1610;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;z-index:55;display:none;align-items:center;justify-content:center;font-size:22px;padding:0;transition:transform .15s ease}
+#fb-btn.show{display:flex}
+#fb-btn:active{transform:scale(.92)}
+.fb-badge{position:absolute;top:-4px;right:-4px;background:#1a1008;color:#c9a66b;font-size:8px;font-weight:700;letter-spacing:.08em;padding:3px 6px;border-radius:8px;text-transform:uppercase;border:1px solid #c9a66b;font-family:Georgia,serif}
+
+/* ── FEEDBACK MODAL ── */
+#fb-modal{position:fixed;inset:0;background:rgba(10,7,4,.85);display:none;align-items:flex-end;justify-content:center;z-index:9998;animation:fadeIn .25s ease}
+#fb-modal.show{display:flex}
+.fb-sheet{background:#1e1610;border-top:2px solid #c9a66b;border-radius:18px 18px 0 0;width:100%;max-width:480px;padding:22px 20px 28px;max-height:90vh;overflow-y:auto;animation:fadeIn .3s ease}
+.fb-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.fb-title{font-size:20px;font-weight:700;color:#f0e6d8;letter-spacing:-.01em}
+.fb-close{background:none;border:none;color:#a08a7a;font-size:26px;cursor:pointer;padding:0 4px;line-height:1}
+.fb-sub{font-size:13px;color:#a08a7a;font-style:italic;margin-bottom:18px;line-height:1.5}
+.fb-label{display:block;font-size:13px;color:#c9a66b;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;font-weight:700}
+.fb-textarea{width:100%;background:#2a1f14;border:1.5px solid #3d2e1a;border-radius:11px;padding:12px 14px;font-size:15px;color:#f0e6d8;font-family:Georgia,serif;outline:none;resize:vertical;min-height:90px;margin-bottom:16px}
+.fb-textarea:focus{border-color:#c9a66b;background:#2f2418}
+.fb-textarea::placeholder{color:#5a4a3a;font-style:italic}
+.fb-context{background:#2a1f14;border:1px solid #3d2e1a;border-radius:9px;padding:9px 12px;font-size:11px;color:#7a6a5a;margin-bottom:16px;font-family:Georgia,serif}
+.fb-submit{width:100%;background:#c9a66b;color:#1a1008;border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:700;font-family:Georgia,serif;cursor:pointer;letter-spacing:.02em}
+.fb-submit:active{background:#b8954f;transform:scale(.98)}
+.fb-submit:disabled{background:#5a4a3a;color:#8a7a6a;cursor:not-allowed;transform:none}
+.fb-error{font-size:13px;color:#e8a090;margin-top:10px;font-style:italic;text-align:center;min-height:18px}
+
 /* TOAST */
 .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);padding:10px 22px;border-radius:20px;color:#fff;font-size:14px;font-weight:600;z-index:999;box-shadow:0 4px 24px rgba(0,0,0,.4);animation:slideDown .3s ease;white-space:nowrap}
 
@@ -231,7 +296,92 @@ if ('serviceWorker' in navigator) {
   <img src="/icon-192.png" alt="ScriptSchedule"/>
   <p>Loading ScriptSchedule...</p>
 </div>
+
+<!-- ── BETA GATE ── -->
+<div id="beta-gate">
+  <div class="bg-inner">
+    <img src="/icon-192.png" alt="ScriptSchedule" class="bg-logo"/>
+
+    <!-- STEP 1: Code -->
+    <div id="bg-step-code">
+      <div class="bg-title">Welcome to the Beta</div>
+      <div class="bg-sub">ScriptSchedule</div>
+      <div class="bg-text">You're one of the first to try it. Enter your beta access code to get started.</div>
+      <input type="text" id="bg-code" class="bg-input" placeholder="Beta access code" autocomplete="off" autocapitalize="none"/>
+      <button class="bg-btn" id="bg-code-btn">Continue</button>
+      <div class="bg-error" id="bg-code-error"></div>
+      <div class="bg-footer">Don't have a code? Reach out to Cynthia.</div>
+    </div>
+
+    <!-- STEP 2: Name + Email -->
+    <div id="bg-step-info" style="display:none">
+      <div class="bg-title">Almost there</div>
+      <div class="bg-sub">Tell us who you are</div>
+      <div class="bg-text">So we know who's using the app and can check in with you during beta.</div>
+      <input type="text" id="bg-name" class="bg-input" placeholder="Your name" autocomplete="name"/>
+      <input type="email" id="bg-email" class="bg-input" placeholder="Email address" autocomplete="email"/>
+      <button class="bg-btn" id="bg-info-btn">Continue</button>
+      <div class="bg-error" id="bg-info-error"></div>
+    </div>
+
+    <!-- STEP 3: Role -->
+    <div id="bg-step-role" style="display:none">
+      <div class="bg-title">One last thing</div>
+      <div class="bg-sub">How will you use it?</div>
+      <div class="bg-text">This helps me understand who ScriptSchedule is helping most.</div>
+      <div class="bg-role-grid">
+        <button class="bg-role-btn" data-role="primary_parent">
+          <span class="bg-role-icon">👨‍👩‍👧</span>
+          <span class="bg-role-label"><b>Primary parent</b><span class="bg-role-sub">Managing meds for my family</span></span>
+        </button>
+        <button class="bg-role-btn" data-role="caring_for_parent">
+          <span class="bg-role-icon">💝</span>
+          <span class="bg-role-label"><b>Caring for an aging parent</b><span class="bg-role-sub">Helping mom, dad, or grandparent</span></span>
+        </button>
+        <button class="bg-role-btn" data-role="my_own_meds">
+          <span class="bg-role-icon">💊</span>
+          <span class="bg-role-label"><b>My own medications</b><span class="bg-role-sub">Just tracking myself</span></span>
+        </button>
+        <button class="bg-role-btn" data-role="pet_meds">
+          <span class="bg-role-icon">🐾</span>
+          <span class="bg-role-label"><b>Pet medications</b><span class="bg-role-sub">Mainly for my furry family</span></span>
+        </button>
+        <button class="bg-role-btn" data-role="just_curious">
+          <span class="bg-role-icon">👀</span>
+          <span class="bg-role-label"><b>Just curious</b><span class="bg-role-sub">Checking it out for now</span></span>
+        </button>
+      </div>
+      <button class="bg-btn" id="bg-role-btn" disabled>Get Started</button>
+      <div class="bg-error" id="bg-role-error"></div>
+    </div>
+  </div>
+</div>
+
 <div class="app" id="app" style="display:none"></div>
+
+<!-- ── BETA FEEDBACK BUTTON & MODAL ── -->
+<button id="fb-btn" aria-label="Send feedback">
+  💬
+  <span class="fb-badge">Beta</span>
+</button>
+
+<div id="fb-modal">
+  <div class="fb-sheet">
+    <div class="fb-head">
+      <div class="fb-title">Send Feedback</div>
+      <button class="fb-close" id="fb-close-btn" aria-label="Close">×</button>
+    </div>
+    <div class="fb-sub">What did you run into? Bug, confusion, idea — anything helps.</div>
+
+    <label class="fb-label" for="fb-message">Your feedback</label>
+    <textarea id="fb-message" class="fb-textarea" placeholder="Tell me what happened or what you were trying to do..."></textarea>
+
+    <div class="fb-context" id="fb-context"></div>
+
+    <button class="fb-submit" id="fb-submit-btn">Send to Cynthia</button>
+    <div class="fb-error" id="fb-error"></div>
+  </div>
+</div>
 
 <script>
 const LOGO_SRC = "/icon-192.png";
@@ -310,8 +460,129 @@ function showToast(msg, type="success") {
 }
 function setState(updates) { Object.assign(state, updates); render(); }
 
+// ── BETA GATE ────────────────────────────────────────────────────────────────
+const BETA_CODE = "appleaday26";
+const BETA_FORMSPREE = "https://formspree.io/f/mrejbvne";
+
+function showBetaGate() {
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("beta-gate").classList.add("show");
+  setTimeout(()=>{ document.getElementById("bg-code").focus(); }, 200);
+}
+
+function checkBetaCode() {
+  const input = document.getElementById("bg-code");
+  const errorEl = document.getElementById("bg-code-error");
+  const entered = (input.value || "").trim().toLowerCase();
+  if (!entered) {
+    errorEl.textContent = "Please enter your beta code.";
+    return;
+  }
+  if (entered !== BETA_CODE.toLowerCase()) {
+    errorEl.textContent = "Hmm, that code didn't work. Double-check with Cynthia.";
+    input.value = "";
+    input.focus();
+    return;
+  }
+  errorEl.textContent = "";
+  document.getElementById("bg-step-code").style.display = "none";
+  document.getElementById("bg-step-info").style.display = "block";
+  setTimeout(()=>{ document.getElementById("bg-name").focus(); }, 100);
+}
+
+async function submitBetaInfo() {
+  const nameEl = document.getElementById("bg-name");
+  const emailEl = document.getElementById("bg-email");
+  const errorEl = document.getElementById("bg-info-error");
+  const name = (nameEl.value || "").trim();
+  const email = (emailEl.value || "").trim();
+
+  if (!name) { errorEl.textContent = "Please enter your name."; nameEl.focus(); return; }
+  if (!email || !email.includes("@") || !email.includes(".")) {
+    errorEl.textContent = "Please enter a valid email."; emailEl.focus(); return;
+  }
+  errorEl.textContent = "";
+
+  // Stash for role step to read
+  window._betaPending = { name: name, email: email };
+
+  // Advance to role step
+  document.getElementById("bg-step-info").style.display = "none";
+  document.getElementById("bg-step-role").style.display = "block";
+}
+
+let _selectedRole = null;
+function selectBetaRole(roleValue, btnEl) {
+  _selectedRole = roleValue;
+  document.querySelectorAll(".bg-role-btn").forEach(b => b.classList.remove("selected"));
+  if (btnEl) btnEl.classList.add("selected");
+  const submitBtn = document.getElementById("bg-role-btn");
+  if (submitBtn) submitBtn.disabled = false;
+}
+
+async function submitBetaRole() {
+  const errorEl = document.getElementById("bg-role-error");
+  const btn = document.getElementById("bg-role-btn");
+  const pending = window._betaPending;
+
+  if (!pending || !_selectedRole) {
+    errorEl.textContent = "Please choose how you'll use the app.";
+    return;
+  }
+  errorEl.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "Setting up...";
+
+  const roleLabels = {
+    primary_parent: "Primary parent",
+    caring_for_parent: "Caring for aging parent",
+    my_own_meds: "My own medications",
+    pet_meds: "Pet medications",
+    just_curious: "Just curious"
+  };
+
+  try {
+    await fetch(BETA_FORMSPREE, {
+      method: "POST",
+      headers: {"Content-Type":"application/json","Accept":"application/json"},
+      body: JSON.stringify({
+        name: pending.name,
+        email: pending.email,
+        role: roleLabels[_selectedRole] || _selectedRole,
+        role_code: _selectedRole,
+        signed_in_at: new Date().toISOString(),
+        device: navigator.userAgent
+      })
+    });
+  } catch(e) {
+    console.warn("Formspree submit failed", e);
+  }
+
+  try {
+    localStorage.setItem("ss:beta", JSON.stringify({
+      name: pending.name, email: pending.email, role: _selectedRole, signedInAt: Date.now()
+    }));
+  } catch(e) {}
+
+  document.getElementById("beta-gate").classList.remove("show");
+  document.getElementById("beta-gate").style.display = "none";
+  document.getElementById("loading").style.display = "flex";
+  setTimeout(realInit, 250);
+}
+
 // ── INIT ─────────────────────────────────────────────────────────────────────
 function init() {
+  // Beta gate check — if already signed in, skip straight to app
+  let beta = null;
+  try { beta = JSON.parse(localStorage.getItem("ss:beta") || "null"); } catch(e) {}
+  if (beta && beta.email) {
+    realInit();
+  } else {
+    showBetaGate();
+  }
+}
+
+function realInit() {
   state.meds = load("ss:meds", SAMPLE_MEDS);
   state.people = load("ss:people", DEFAULT_PEOPLE);
   state.pets = load("ss:pets", DEFAULT_PETS);
@@ -321,7 +592,77 @@ function init() {
   state.loaded = true;
   document.getElementById("loading").style.display = "none";
   document.getElementById("app").style.display = "block";
+  document.getElementById("fb-btn").classList.add("show");
   render();
+}
+
+// ── BETA FEEDBACK ────────────────────────────────────────────────────────────
+const FEEDBACK_FORMSPREE = "https://formspree.io/f/meenobov";
+
+function openFeedback() {
+  const modal = document.getElementById("fb-modal");
+  const ctx = document.getElementById("fb-context");
+  const viewLabels = {
+    dashboard:"Home", meds:"Medications", scan:"Scan Bottle", pill:"Pill ID",
+    docs:"Documents", emergency:"Emergency", report:"Report", add:"Add Med"
+  };
+  const screen = viewLabels[state.view] || state.view || "Unknown";
+  ctx.textContent = "Sending from: " + screen + " screen";
+  document.getElementById("fb-message").value = "";
+  document.getElementById("fb-error").textContent = "";
+  modal.classList.add("show");
+  setTimeout(()=>{ document.getElementById("fb-message").focus(); }, 200);
+}
+
+function closeFeedback() {
+  document.getElementById("fb-modal").classList.remove("show");
+}
+
+async function submitFeedback() {
+  const msgEl = document.getElementById("fb-message");
+  const errorEl = document.getElementById("fb-error");
+  const btn = document.getElementById("fb-submit-btn");
+  const message = (msgEl.value || "").trim();
+
+  if (!message) {
+    errorEl.textContent = "Please write your feedback first.";
+    msgEl.focus();
+    return;
+  }
+
+  errorEl.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "Sending...";
+
+  // Pull tester info from beta sign-in
+  let tester = {name:"Unknown", email:"unknown"};
+  try {
+    const beta = JSON.parse(localStorage.getItem("ss:beta") || "null");
+    if (beta && beta.email) tester = {name:beta.name||"Unknown", email:beta.email};
+  } catch(e) {}
+
+  try {
+    await fetch(FEEDBACK_FORMSPREE, {
+      method: "POST",
+      headers: {"Content-Type":"application/json","Accept":"application/json"},
+      body: JSON.stringify({
+        feedback: message,
+        from_name: tester.name,
+        from_email: tester.email,
+        screen: state.view || "unknown",
+        sent_at: new Date().toISOString(),
+        device: navigator.userAgent
+      })
+    });
+    closeFeedback();
+    btn.disabled = false;
+    btn.textContent = "Send to Cynthia";
+    showToast("✓ Thanks! Feedback sent to Cynthia.");
+  } catch(e) {
+    errorEl.textContent = "Couldn't send right now. Try again in a moment.";
+    btn.disabled = false;
+    btn.textContent = "Send to Cynthia";
+  }
 }
 
 // ── ACTIONS ──────────────────────────────────────────────────────────────────
@@ -392,15 +733,43 @@ function addFromScan() {
 }
 
 // ── CLAUDE API ───────────────────────────────────────────────────────────────
+// ── CLAUDE API ───────────────────────────────────────────────────────────────
 async function callClaude(messages, maxTokens=1200) {
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
+  const r = await fetch("/.netlify/functions/claude", {
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:maxTokens,messages})
+    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:maxTokens,messages})
   });
   const d = await r.json();
+  if (d.error) throw new Error(d.error.message);
   const text = (d.content||[]).find(b=>b.type==="text")?.text||"";
   return JSON.parse(text.replace(/```json|```/g,"").trim());
+}
+
+// ── SCAN ERROR LOGGING ──────────────────────────────────────────────────────
+async function logScanError(errorType, details, mode) {
+  try {
+    let tester = {name:"Unknown", email:"unknown"};
+    try {
+      const beta = JSON.parse(localStorage.getItem("ss:beta") || "null");
+      if (beta && beta.email) tester = {name:beta.name||"Unknown", email:beta.email};
+    } catch(e) {}
+    fetch("https://formspree.io/f/meenobov", {
+      method: "POST",
+      headers: {"Content-Type":"application/json","Accept":"application/json"},
+      body: JSON.stringify({
+        feedback: "[SCAN ERROR] " + errorType + " — " + (details||"no details") + " (mode: " + (mode||"scan") + ")",
+        from_name: tester.name,
+        from_email: tester.email,
+        screen: "auto-logged-error",
+        error_type: errorType,
+        error_details: details||"",
+        mode: mode||"scan",
+        sent_at: new Date().toISOString(),
+        device: navigator.userAgent
+      })
+    }).catch(()=>{});
+  } catch(e) {}
 }
 
 async function handleImageUpload(file, mode) {
@@ -414,11 +783,12 @@ async function handleImageUpload(file, mode) {
       try {
         const result = await callClaude([{role:"user",content:[
           {type:"image",source:{type:"base64",media_type:mt,data:base64}},
-          {type:"text",text:'Read this prescription label. Return ONLY JSON: {"name":"","dose":"","directions":"","prescriber":"","pharmacy":"","refills":"","ndc":"","patient":""}. Use "Not found" for missing fields.'}
+          {type:"text",text:'You are reading a prescription bottle label. Extract whatever text is visible, even if the image is partially blurry or cut off. Do your best — use "Unknown" only if a field is truly not visible anywhere on the label. Return ONLY valid JSON with no extra text: {"name":"","dose":"","directions":"","prescriber":"","pharmacy":"","refills":"","ndc":"","patient":""}'}
         ]}]);
         setState({scanActive:false, scanResult:result});
       } catch(e) {
         setState({scanActive:false, scanError:"Couldn't read the label. Try a clearer photo."});
+        logScanError("scan_failed", e.message||String(e), "scan");
       }
     } else if (mode==="pill") {
       setState({pillImage:ev.target.result, pillLoading:true, pillResult:null, pillError:null});
@@ -439,6 +809,7 @@ async function handleImageUpload(file, mode) {
       } catch(e) {
         setState({docUploading:false});
         showToast("Analysis failed — try again","error");
+        logScanError("doc_analysis_failed", e.message||String(e), "doc");
       }
     }
   };
@@ -449,13 +820,17 @@ async function runPillIdentify(imageBlock, imprint) {
   const currentMeds = state.meds.map(m=>m.name).join(", ")||"none";
   const content = [];
   if (imageBlock) content.push(imageBlock);
-  content.push({type:"text",text:`${imageBlock?"Identify the pill in this photo.":"Identify pill with imprint: "+imprint} Current meds: ${currentMeds}. Return ONLY JSON: {"name":"","brandName":null,"strength":"","shape":"","color":"","imprint":"","category":"","usedFor":"","howItWorks":"","commonSideEffects":[],"seriousWarnings":[],"interactions":[{"drug":"","severity":"mild|moderate|severe","description":""}],"notes":null,"confidence":"high|medium|low"}`});
+  content.push({type:"text",text:`${imageBlock?"You are a pill identification expert. Analyze this photo carefully and identify the medication — use shape, color, imprint, and markings even if partially visible.":"Identify pill with imprint code: "+imprint} Current patient meds for interaction check: ${currentMeds}. Return ONLY valid JSON with no extra text: {"name":"","brandName":null,"strength":"","shape":"","color":"","imprint":"","category":"","usedFor":"","howItWorks":"","commonSideEffects":[],"seriousWarnings":[],"interactions":[{"drug":"","severity":"mild|moderate|severe","description":""}],"notes":null,"confidence":"high|medium|low"}`});
   try {
     const result = await callClaude([{role:"user",content}]);
-    if (!result.name) setState({pillLoading:false, pillError:"Couldn't identify. Try clearer photo or type the imprint code."});
+    if (!result.name) {
+      setState({pillLoading:false, pillError:"Couldn't identify. Try clearer photo or type the imprint code."});
+      logScanError("pill_no_match", "no name returned", imageBlock?"pill_photo":"pill_imprint");
+    }
     else setState({pillLoading:false, pillResult:result});
   } catch(e) {
     setState({pillLoading:false, pillError:"Identification failed. Please try again."});
+    logScanError("pill_failed", e.message||String(e), imageBlock?"pill_photo":"pill_imprint");
   }
 }
 
@@ -495,31 +870,41 @@ ${toastHTML}
 </header>
 
 <div class="people-section">
-  <div class="people-bar" style="flex-wrap:nowrap;overflow-x:auto;gap:8px;padding:8px 14px 4px">
-    ${state.people.map(p=>`
-      <div class="person-wrap">
-        <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="selectPerson" data-person="${p}">
-          <span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span>${p}
-        </button>
-        <button class="remove-btn" data-action="removePerson" data-person="${p}">×</button>
-      </div>`).join("")}
+  <div class="people-all-row">
+    <button class="people-all-btn ${state.selectedPerson==="All"?"active":""}" data-action="selectPerson" data-person="All">⊞ All</button>
   </div>
-  <div class="people-bar" style="flex-wrap:nowrap;overflow-x:auto;gap:8px;padding:4px 14px 8px;border-top:1px solid #2a2018">
-    <button class="person-btn ${state.selectedPerson==="All"?"active":""}" style="${state.selectedPerson==="All"?`background:#c9a66b;color:#1a1008`:""}" data-action="selectPerson" data-person="All">All</button>
-    <span style="font-size:11px;color:#5a4a43">🐾</span>
-    ${state.pets.map(p=>`
-      <div class="person-wrap">
-        <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="selectPerson" data-person="${p}">
-          <span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span>${p}
-        </button>
-        <button class="remove-btn" data-action="removePerson" data-person="${p}">×</button>
-      </div>`).join("")}
+  ${state.people.length>0?`
+    <div class="people-group-label">Family</div>
+    <div class="people-grid">
+      ${state.people.map(p=>`
+        <div class="person-wrap">
+          <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${p}">
+            <span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span>
+          </button>
+          <button class="remove-btn" data-action="removePerson" data-person="${p}">×</button>
+        </div>`).join("")}
+    </div>
+  `:""}
+  ${state.pets.length>0?`
+    <div class="people-group-label">🐾 Pets</div>
+    <div class="people-grid">
+      ${state.pets.map(p=>`
+        <div class="person-wrap">
+          <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${p}">
+            <span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span>
+          </button>
+          <button class="remove-btn" data-action="removePerson" data-person="${p}">×</button>
+        </div>`).join("")}
+    </div>
+  `:""}
+  <div class="people-group-label" style="margin-top:10px">Add</div>
+  <div class="people-grid">
     ${state.showAddPerson ? `
-      <div class="add-person-input">
+      <div class="add-person-input" style="grid-column:span 3">
         <input class="person-name-input" id="newPersonInput" value="${state.newPersonName}" placeholder="Name..." />
         <button class="confirm-btn" data-action="addPerson">✓</button>
         <button class="cancel-btn" data-action="cancelAddPerson">×</button>
-      </div>` : `<button class="add-person-btn" data-action="showAddPerson">+ Add</button>`}
+      </div>` : `<button class="add-person-btn" data-action="showAddPerson" style="grid-column:span 3">+ Add Person or Pet</button>`}
   </div>
 </div>
 
@@ -760,11 +1145,11 @@ ${doc.followUp?`<div class="form-card" style="margin-bottom:12px;border-left:3px
 
   return `
 <div class="section-header"><span>Medical Documents</span></div>
-<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px;padding-bottom:2px">
+<div class="inline-picker">
   ${state.people.map(p=>`
-    <button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setDocsPerson" data-person="${p}">
-      <span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}
-      ${state.docs.filter(d=>d.person===p).length>0?`<span style="background:#c9a66b33;color:#c9a66b;border-radius:8px;padding:1px 6px;font-size:10px;margin-left:2px">${state.docs.filter(d=>d.person===p).length}</span>`:""}
+    <button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setDocsPerson" data-person="${p}">
+      <span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span>
+      ${state.docs.filter(d=>d.person===p).length>0?`<span class="doc-count">${state.docs.filter(d=>d.person===p).length}</span>`:""}
     </button>`).join("")}
 </div>
 <div class="doc-upload-area">
@@ -813,8 +1198,8 @@ function buildEmergency() {
     const ef = state.emergencyForm;
     return `
 <div class="emergency-header"><div style="font-size:22px">🚨</div><div><div style="font-weight:700;font-size:16px">Emergency Information</div><div style="font-size:11px;opacity:.8;letter-spacing:.1em">SHOW THIS TO FIRST RESPONDERS</div></div></div>
-<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px">
-  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="font-size:12px;padding:5px 12px;${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setEmergencyPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}</button>`).join("")}
+<div class="inline-picker">
+  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setEmergencyPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span></button>`).join("")}
 </div>
 <div class="form-card">
   <div style="font-size:14px;font-weight:700;margin-bottom:12px">${activePerson} — Edit Emergency Info</div>
@@ -833,8 +1218,8 @@ function buildEmergency() {
 
   return `
 <div class="emergency-header"><div style="font-size:22px">🚨</div><div><div style="font-weight:700;font-size:16px">Emergency Information</div><div style="font-size:11px;opacity:.8;letter-spacing:.1em">SHOW THIS TO FIRST RESPONDERS</div></div></div>
-<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px">
-  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="font-size:12px;padding:5px 12px;${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setEmergencyPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}</button>`).join("")}
+<div class="inline-picker">
+  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setEmergencyPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span></button>`).join("")}
 </div>
 <div class="emergency-card">
   <div class="section-title-sm">Vitals</div>
@@ -871,8 +1256,8 @@ function buildReport(filtered) {
   <div><div style="font-weight:700;font-size:16px">Adherence Report</div><div style="font-size:11px;color:#c9a66b;letter-spacing:.1em;margin-top:2px">GENERATED ${today.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}).toUpperCase()}</div></div>
   <div style="font-size:28px">📊</div>
 </div>
-<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px">
-  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="font-size:12px;padding:5px 12px;${activePerson===p?`background:${getColor(p)};color:#1a1008`:""}" data-action="setReportPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)};width:18px;height:18px;font-size:9px">${getInitials(p)}</span>${p}</button>`).join("")}
+<div class="inline-picker">
+  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setReportPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span></button>`).join("")}
 </div>
 <div class="range-btns">
   ${[["7","7 Days"],["30","30 Days"],["90","90 Days"]].map(([v,l])=>`<button class="range-btn ${state.reportRange===v?"active":""}" data-action="setReportRange" data-range="${v}">${l}</button>`).join("")}
@@ -1099,7 +1484,41 @@ function identifyByImprint() {
 }
 
 // ── START ────────────────────────────────────────────────────────────────────
-window.addEventListener("load", init);
+window.addEventListener("load", function() {
+  // Wire up beta gate buttons
+  const codeBtn = document.getElementById("bg-code-btn");
+  const codeInput = document.getElementById("bg-code");
+  const infoBtn = document.getElementById("bg-info-btn");
+  const nameInput = document.getElementById("bg-name");
+  const emailInput = document.getElementById("bg-email");
+
+  if (codeBtn) codeBtn.addEventListener("click", checkBetaCode);
+  if (codeInput) codeInput.addEventListener("keydown", e => { if(e.key==="Enter") checkBetaCode(); });
+  if (infoBtn) infoBtn.addEventListener("click", submitBetaInfo);
+  if (nameInput) nameInput.addEventListener("keydown", e => { if(e.key==="Enter") emailInput.focus(); });
+  if (emailInput) emailInput.addEventListener("keydown", e => { if(e.key==="Enter") submitBetaInfo(); });
+
+  // Wire role selection buttons
+  document.querySelectorAll(".bg-role-btn").forEach(btn => {
+    btn.addEventListener("click", () => selectBetaRole(btn.dataset.role, btn));
+  });
+  const roleSubmitBtn = document.getElementById("bg-role-btn");
+  if (roleSubmitBtn) roleSubmitBtn.addEventListener("click", submitBetaRole);
+
+  // Wire up feedback button
+  const fbBtn = document.getElementById("fb-btn");
+  const fbCloseBtn = document.getElementById("fb-close-btn");
+  const fbSubmitBtn = document.getElementById("fb-submit-btn");
+  const fbModal = document.getElementById("fb-modal");
+
+  if (fbBtn) fbBtn.addEventListener("click", openFeedback);
+  if (fbCloseBtn) fbCloseBtn.addEventListener("click", closeFeedback);
+  if (fbSubmitBtn) fbSubmitBtn.addEventListener("click", submitFeedback);
+  // Tap dark backdrop to close
+  if (fbModal) fbModal.addEventListener("click", e => { if(e.target===fbModal) closeFeedback(); });
+
+  init();
+});
 
 // ── SERVICE WORKER ───────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
@@ -1167,16 +1586,38 @@ if ('serviceWorker' in navigator) {
 
 <!-- TUTORIAL -->
 <div id="tut">
-  <div class="tut-box">
+  <div class="tut-box" style="max-height:90vh;overflow-y:auto">
     <h2>Welcome to ScriptSchedule</h2>
-    <p>Your family prescription manager. Get started in 3 steps.</p>
+    <p>Your family prescription manager. Get started in 4 steps.</p>
     <div class="tut-steps">
-      <div class="tut-step"><div class="tut-n">1</div><div class="tut-t"><b>Add your family</b> — tap <b>+ Add</b> at the top to replace the placeholder names with your real family members.</div></div>
-      <div class="tut-step"><div class="tut-n">2</div><div class="tut-t"><b>Add medications</b> — tap <b>Meds</b> then <b>+ Add Med</b> to enter each person's prescriptions.</div></div>
-      <div class="tut-step"><div class="tut-n">3</div><div class="tut-t"><b>Install on your phone</b> — use the banner at the bottom to add this to your home screen like a real app.</div></div>
+      <div class="tut-step"><div class="tut-n">1</div><div class="tut-t"><b>Add your family</b> — tap <b>+ Add</b> at the top to add each family member by name.</div></div>
+      <div class="tut-step"><div class="tut-n">2</div><div class="tut-t"><b>Add medications</b> — tap <b>Meds</b> then <b>+ Add Med</b>, or use <b>Scan</b> to photograph a prescription label and auto-fill.</div></div>
+      <div class="tut-step">
+        <div class="tut-n">3</div>
+        <div class="tut-t">
+          <b>Install on your phone</b> — add ScriptSchedule to your home screen like a real app:<br><br>
+          <div style="background:#1a1208;border-radius:10px;padding:10px 12px;margin-bottom:8px">
+            <div style="color:#c9a66b;font-size:11px;font-weight:700;letter-spacing:.08em;margin-bottom:6px">🍎 iPHONE (Safari)</div>
+            <div style="font-size:12px;color:#d9c7b9;line-height:1.7">1. Tap the <b>Share</b> button &#11014;&#65039; at the bottom<br>2. Scroll and tap <b>Add to Home Screen</b> &#10133;<br>3. Tap <b>Add</b> in the top right — done!</div>
+          </div>
+          <div style="background:#1a1208;border-radius:10px;padding:10px 12px">
+            <div style="color:#8cc49a;font-size:11px;font-weight:700;letter-spacing:.08em;margin-bottom:6px">🤖 ANDROID (Chrome)</div>
+            <div style="font-size:12px;color:#d9c7b9;line-height:1.7">1. Tap the <b>three-dot menu</b> ⋮ in the top right<br>2. Tap <b>Add to Home Screen</b> or <b>Install App</b><br>3. Tap <b>Install</b> — it works just like a real app!</div>
+          </div>
+        </div>
+      </div>
+      <div class="tut-step">
+        <div class="tut-n">4</div>
+        <div class="tut-t">
+          <b>Share with family</b> — anyone in your household can use ScriptSchedule on their own phone:<br><br>
+          <div style="background:#1a1208;border-radius:10px;padding:10px 12px">
+            <div style="font-size:12px;color:#d9c7b9;line-height:1.7">&#128279; Tap the <b>share icon</b> in your browser and send the link to a spouse, caregiver, or adult child.<br><br>&#128100; Each person installs it the same way (see step 3). Each phone keeps its own data — perfect for caregivers tracking a parent's medications independently.</div>
+          </div>
+        </div>
+      </div>
     </div>
     <button class="tut-go" onclick="document.getElementById('tut').classList.remove('show');try{localStorage.setItem('ss-td','1')}catch(e){}">Got it — Let's start →</button>
-    <button class="tut-skip" onclick="document.getElementById('tut').classList.remove('show');try{localStorage.setItem('ss-td','1')}catch(e){}">Skip</button>
+    <button class="tut-skip" onclick="document.getElementById('tut').classList.remove('show');try{localStorage.setItem('ss-td','1')}catch(e){}">Skip for now</button>
   </div>
 </div>
 <script>
