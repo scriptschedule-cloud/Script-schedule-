@@ -281,6 +281,25 @@ textarea.form-input{min-height:72px;resize:vertical}
 .tut-t b{color:#c9a66b}
 .tut-go{width:100%;background:linear-gradient(135deg,#8B6914,#c9a66b);color:#1a1008;border:none;border-radius:13px;padding:14px;font-size:15px;font-weight:700;font-family:Georgia,serif;cursor:pointer;margin-bottom:8px}
 .tut-skip{background:none;border:none;color:#5a4a43;font-size:12px;cursor:pointer;font-family:Georgia,serif;width:100%}
+.reminder-overlay{position:fixed;inset:0;background:rgba(10,6,2,.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;animation:reminderFadeIn .3s ease-out}
+.reminder-card{background:linear-gradient(180deg,#2a1f12,#1a1208);border-radius:18px;border:2px solid #c9a66b;padding:24px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 40px rgba(201,166,107,.2)}
+.reminder-header{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #3a2e24}
+.reminder-pulse{font-size:32px;animation:reminderPulse 1.4s ease-in-out infinite}
+.reminder-title{color:#c9a66b;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em}
+.reminder-med{margin-bottom:20px}
+.reminder-med-name{font-family:Georgia,serif;font-size:24px;font-weight:700;color:#f0e6d8;margin-bottom:4px;line-height:1.2}
+.reminder-med-dose{font-size:15px;color:#c9a66b;margin-bottom:10px}
+.reminder-med-meta{display:flex;align-items:center;gap:8px;font-size:13px;color:#d9c7b9}
+.reminder-person-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.reminder-food-tag{display:inline-block;background:#2a3a28;color:#8cc49a;font-size:12px;padding:4px 10px;border-radius:10px;margin-top:10px;font-weight:600}
+.reminder-actions{display:flex;flex-direction:column;gap:8px}
+.reminder-btn{padding:14px;border-radius:12px;border:none;font-family:Georgia,serif;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.reminder-btn:active{opacity:.7}
+.reminder-btn-take{background:linear-gradient(180deg,#c9a66b,#a8854a);color:#1a1008;font-size:17px;padding:16px}
+.reminder-btn-snooze{background:#3a2e24;color:#d9c7b9;border:1px solid #4a3e34}
+.reminder-btn-skip{background:transparent;color:#8a7a70;font-size:13px;padding:10px}
+@keyframes reminderFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes reminderPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.15);opacity:.8}}
 </style>
 </head>
 <body>
@@ -354,7 +373,7 @@ if ('serviceWorker' in navigator) {
           <span class="bg-role-label"><b>Just curious</b><span class="bg-role-sub">Checking it out for now</span></span>
         </button>
       </div>
-      <div class="bg-notice">⏰ <b>Quick heads up:</b> Push reminders aren't fully active during beta. Please use a backup phone alarm for now — we're working on real reminders for the next version!</div>
+      <div class="bg-notice">⏰ <b>Quick heads up:</b> Reminders work when the app is open in your browser. Phone push notifications (when app is closed) are coming soon — for now, please keep a backup phone alarm too!</div>
       <button class="bg-btn" id="bg-role-btn" disabled>Get Started</button>
       <div class="bg-error" id="bg-role-error"></div>
     </div>
@@ -435,7 +454,12 @@ let state = {
   docViewing: null,
   docUploading: false,
   toast: null,
-  toastTimer: null
+  toastTimer: null,
+  // Reminder system state
+  scheduleConfirm: null,    // { person, name, dose, frequency, times, withFood, notes }
+  activeReminder: null,     // { medId, time, medName, person, doseKey }
+  reminderInterval: null,   // setInterval handle
+  snoozeTimers: {}          // { doseKey: setTimeout handle }
 };
 
 // ── STORAGE ──────────────────────────────────────────────────────────────────
@@ -585,6 +609,26 @@ function init() {
 
 function realInit() {
   state.meds = load("ss:meds", SAMPLE_MEDS);
+  // Migrate any meds missing the new schedule fields
+  const today = todayStr();
+  state.meds = state.meds.map(m => {
+    const times = (m.times && m.times.length) ? m.times : (m.time ? [m.time] : ["08:00"]);
+    let doseLog = m.doseLog || [];
+    // If legacy "taken" flag is set but no log entry exists, backfill so we don't re-remind
+    if (m.taken && times.length) {
+      const firstKey = doseKey(m.id, today, times[0]);
+      if (!doseLog.find(l => l.key === firstKey)) {
+        doseLog.push({ key: firstKey, status: "taken", timestamp: Date.now() });
+      }
+    }
+    return {
+      ...m,
+      times,
+      doseLog,
+      withFood: m.withFood || false
+    };
+  });
+  save("ss:meds", state.meds);
   state.people = load("ss:people", DEFAULT_PEOPLE);
   state.pets = load("ss:pets", DEFAULT_PETS);
   state.colorMap = load("ss:colors", BASE_COLORS);
@@ -595,6 +639,7 @@ function realInit() {
   document.getElementById("app").style.display = "block";
   document.getElementById("fb-btn").classList.add("show");
   render();
+  startReminderEngine();
 }
 
 // ── BETA FEEDBACK ────────────────────────────────────────────────────────────
@@ -668,6 +713,28 @@ async function submitFeedback() {
 
 // ── ACTIONS ──────────────────────────────────────────────────────────────────
 function takeMed(id) {
+  const med = state.meds.find(m => m.id === id);
+  if (med) {
+    // Find the most relevant dose time (closest pending one for today)
+    const times = (med.times && med.times.length) ? med.times : (med.time ? [med.time] : ["08:00"]);
+    const today = todayStr();
+    const nowMin = nowMinutes();
+    // Find the closest dose time that hasn't been taken yet
+    let targetTime = times[0];
+    let closestDelta = Infinity;
+    for (const t of times) {
+      const key = doseKey(id, today, t);
+      const existing = (med.doseLog || []).find(l => l.key === key);
+      if (existing && existing.status === "taken") continue;
+      const delta = Math.abs(timeToMinutes(t) - nowMin);
+      if (delta < closestDelta) {
+        closestDelta = delta;
+        targetTime = t;
+      }
+    }
+    const key = doseKey(id, today, targetTime);
+    logDoseAction(id, key, "taken");
+  }
   state.meds = state.meds.map(m=>m.id===id?{...m,taken:true}:m);
   save("ss:meds", state.meds);
   showToast("✓ Medication marked as taken");
@@ -694,7 +761,7 @@ function submitForm() {
     state.meds = state.meds.map(m=>m.id===state.editMedId?{...m,...state.form}:m);
     showToast("✓ Medication updated");
   } else {
-    state.meds.push({id:Date.now(),...state.form,nextDue:"Today "+state.form.time,taken:false});
+    state.meds.push({id:Date.now(),...state.form,times:[state.form.time||"08:00"],doseLog:[],nextDue:"Today "+state.form.time,taken:false});
     showToast("✓ Medication added");
   }
   save("ss:meds", state.meds);
@@ -727,10 +794,87 @@ function addFromScan() {
   if (!state.scanResult) return;
   const r = state.scanResult;
   const person = state.selectedPerson==="All"?"Your Name":state.selectedPerson;
-  state.meds.push({id:Date.now(),person,name:r.name,dose:r.dose,frequency:r.directions||"Daily",time:"08:00",notes:`Prescriber: ${r.prescriber||""} | ${r.pharmacy||""}`,nextDue:"Today 8:00 AM",taken:false});
+  // Route to confirmation screen instead of immediately saving
+  state.scheduleConfirm = {
+    person,
+    name: r.name || "",
+    dose: r.dose || "",
+    frequency: r.frequency || "Daily",
+    times: Array.isArray(r.times) && r.times.length ? [...r.times] : ["08:00"],
+    withFood: !!r.withFood,
+    notes: [
+      r.specialInstructions || "",
+      r.prescriber ? "Prescriber: "+r.prescriber : "",
+      r.pharmacy ? "Pharmacy: "+r.pharmacy : "",
+      r.directions ? "Directions: "+r.directions : ""
+    ].filter(Boolean).join(" | ")
+  };
+  setState({view:"confirmSchedule"});
+}
+
+function confirmScheduleSave() {
+  const c = state.scheduleConfirm;
+  if (!c) return;
+  // Read any user edits from the form
+  const nameEl = document.getElementById("cs-name");
+  const doseEl = document.getElementById("cs-dose");
+  const freqEl = document.getElementById("cs-freq");
+  const foodEl = document.getElementById("cs-food");
+  if (nameEl) c.name = nameEl.value.trim();
+  if (doseEl) c.dose = doseEl.value.trim();
+  if (freqEl) c.frequency = freqEl.value;
+  if (foodEl) c.withFood = foodEl.checked;
+  // Read time inputs
+  const timeInputs = document.querySelectorAll("[data-time-idx]");
+  if (timeInputs.length) {
+    c.times = Array.from(timeInputs).map(el => el.value).filter(Boolean);
+  }
+  if (!c.name || !c.dose) { showToast("Name and dose required","error"); return; }
+  if (!c.times.length && c.frequency !== "As needed") { showToast("Add at least one time","error"); return; }
+  state.meds.push({
+    id: Date.now(),
+    person: c.person,
+    name: c.name,
+    dose: c.dose,
+    frequency: c.frequency,
+    times: c.times,
+    time: c.times[0] || "08:00", // backwards compat
+    withFood: c.withFood,
+    notes: c.notes,
+    pharmacy: "",
+    doseLog: [],
+    nextDue: "Today " + (c.times[0] || "08:00"),
+    taken: false
+  });
   save("ss:meds", state.meds);
-  showToast("✓ Added from scan");
-  setState({view:"meds", scanResult:null, scanImagePreview:null});
+  showToast("✓ Added with reminder schedule");
+  setState({view:"meds", scanResult:null, scanImagePreview:null, scheduleConfirm:null});
+}
+
+function cancelConfirmSchedule() {
+  setState({view:"scan", scheduleConfirm:null});
+}
+
+function addTimeToConfirm() {
+  if (!state.scheduleConfirm) return;
+  // Save any current edits first
+  const timeInputs = document.querySelectorAll("[data-time-idx]");
+  if (timeInputs.length) {
+    state.scheduleConfirm.times = Array.from(timeInputs).map(el => el.value).filter(Boolean);
+  }
+  state.scheduleConfirm.times.push("12:00");
+  render();
+}
+
+function removeTimeFromConfirm(idx) {
+  if (!state.scheduleConfirm) return;
+  // Save any current edits first
+  const timeInputs = document.querySelectorAll("[data-time-idx]");
+  if (timeInputs.length) {
+    state.scheduleConfirm.times = Array.from(timeInputs).map(el => el.value).filter(Boolean);
+  }
+  state.scheduleConfirm.times.splice(idx, 1);
+  render();
 }
 
 // ── CLAUDE API ───────────────────────────────────────────────────────────────
@@ -745,6 +889,201 @@ async function callClaude(messages, maxTokens=1200) {
   if (d.error) throw new Error(d.error.message);
   const text = (d.content||[]).find(b=>b.type==="text")?.text||"";
   return JSON.parse(text.replace(/```json|```/g,"").trim());
+}
+
+// ── REMINDER ENGINE ──────────────────────────────────────────────────────────
+// Generates a unique key for a specific dose on a specific day
+function doseKey(medId, dateStr, time) {
+  return medId + "|" + dateStr + "|" + time;
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function nowMinutes() {
+  const d = new Date();
+  return d.getHours()*60 + d.getMinutes();
+}
+
+function timeToMinutes(t) {
+  if (!t) return 0;
+  const [h,m] = t.split(":").map(Number);
+  return h*60 + (m||0);
+}
+
+function formatTime12(t) {
+  if (!t) return "";
+  const [h,m] = t.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return h12 + ":" + String(m||0).padStart(2,"0") + " " + ampm;
+}
+
+// Get all dose-events for today across all meds
+function getTodayDoses() {
+  const today = todayStr();
+  const events = [];
+  state.meds.forEach(m => {
+    if (m.frequency === "As needed") return;
+    const times = (m.times && m.times.length) ? m.times : (m.time ? [m.time] : []);
+    times.forEach(t => {
+      const key = doseKey(m.id, today, t);
+      const logEntry = (m.doseLog||[]).find(l => l.key === key);
+      events.push({
+        medId: m.id,
+        medName: m.name,
+        dose: m.dose,
+        person: m.person,
+        time: t,
+        timeMinutes: timeToMinutes(t),
+        key,
+        status: logEntry ? logEntry.status : "pending", // pending, taken, snoozed, skipped, missed
+        snoozedUntil: logEntry ? logEntry.snoozedUntil : null
+      });
+    });
+  });
+  return events.sort((a,b) => a.timeMinutes - b.timeMinutes);
+}
+
+// Log a dose action
+function logDoseAction(medId, key, status, extra) {
+  const med = state.meds.find(m => m.id === medId);
+  if (!med) return;
+  if (!med.doseLog) med.doseLog = [];
+  // Remove any existing entry for this key, then add the new one
+  med.doseLog = med.doseLog.filter(l => l.key !== key);
+  med.doseLog.push({
+    key,
+    status,
+    timestamp: Date.now(),
+    ...(extra || {})
+  });
+  save("ss:meds", state.meds);
+}
+
+// Mark a dose taken
+function reminderTake() {
+  if (!state.activeReminder) return;
+  const { medId, key } = state.activeReminder;
+  logDoseAction(medId, key, "taken");
+  // Clear any snooze timer for this dose
+  if (state.snoozeTimers[key]) {
+    clearTimeout(state.snoozeTimers[key]);
+    delete state.snoozeTimers[key];
+  }
+  state.activeReminder = null;
+  showToast("✓ Dose marked as taken");
+  render();
+}
+
+// Snooze 15 minutes
+function reminderSnooze() {
+  if (!state.activeReminder) return;
+  const { medId, key, medName } = state.activeReminder;
+  const snoozedUntil = Date.now() + 15*60*1000;
+  logDoseAction(medId, key, "snoozed", { snoozedUntil });
+  // Set a timeout to re-fire the reminder
+  if (state.snoozeTimers[key]) clearTimeout(state.snoozeTimers[key]);
+  state.snoozeTimers[key] = setTimeout(() => {
+    delete state.snoozeTimers[key];
+    // Re-trigger the reminder for this dose
+    triggerReminder({
+      medId,
+      key,
+      medName,
+      time: state.activeReminder?.time || "",
+      person: state.activeReminder?.person || ""
+    });
+  }, 15*60*1000);
+  state.activeReminder = null;
+  showToast("⏰ Snoozed 15 minutes");
+  render();
+}
+
+// Skip this dose
+function reminderSkip() {
+  if (!state.activeReminder) return;
+  const { medId, key } = state.activeReminder;
+  logDoseAction(medId, key, "skipped");
+  if (state.snoozeTimers[key]) {
+    clearTimeout(state.snoozeTimers[key]);
+    delete state.snoozeTimers[key];
+  }
+  state.activeReminder = null;
+  showToast("Dose skipped","info");
+  render();
+}
+
+// Display a reminder banner
+function triggerReminder(event) {
+  // Only show one at a time; if there's already an active one, skip
+  if (state.activeReminder) return;
+  state.activeReminder = {
+    medId: event.medId,
+    medName: event.medName,
+    person: event.person,
+    time: event.time,
+    key: event.key
+  };
+  // Vibrate if available
+  try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch(e) {}
+  // Audio chime
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 880;
+    g.gain.setValueAtTime(0.15, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    o.start(); o.stop(ctx.currentTime + 0.5);
+  } catch(e) {}
+  render();
+}
+
+// Main reminder check — runs every minute
+function checkReminders() {
+  if (!state.loaded) return;
+  if (state.activeReminder) return; // don't stack
+  const events = getTodayDoses();
+  const nowMin = nowMinutes();
+  const now = Date.now();
+
+  for (const ev of events) {
+    // Skip already-resolved doses
+    if (ev.status === "taken" || ev.status === "skipped") continue;
+
+    // Handle snoozed: if snooze expired, treat as pending again
+    if (ev.status === "snoozed") {
+      if (ev.snoozedUntil && now >= ev.snoozedUntil) {
+        triggerReminder(ev);
+        return;
+      }
+      continue;
+    }
+
+    // Pending dose: fire if dose time has arrived (within last 60 min, not yet handled)
+    if (ev.status === "pending") {
+      const minsLate = nowMin - ev.timeMinutes;
+      if (minsLate >= 0 && minsLate < 60) {
+        triggerReminder(ev);
+        return;
+      }
+      // If more than 60 min late and no log, mark as missed
+      if (minsLate >= 60) {
+        logDoseAction(ev.medId, ev.key, "missed");
+      }
+    }
+  }
+}
+
+function startReminderEngine() {
+  if (state.reminderInterval) clearInterval(state.reminderInterval);
+  // Check immediately, then every 60 seconds
+  checkReminders();
+  state.reminderInterval = setInterval(checkReminders, 60000);
 }
 
 // ── SCAN ERROR LOGGING ──────────────────────────────────────────────────────
@@ -784,7 +1123,7 @@ async function handleImageUpload(file, mode) {
       try {
         const result = await callClaude([{role:"user",content:[
           {type:"image",source:{type:"base64",media_type:mt,data:base64}},
-          {type:"text",text:'You are reading a prescription bottle label. Extract whatever text is visible, even if the image is partially blurry or cut off. Do your best — use "Unknown" only if a field is truly not visible anywhere on the label. Return ONLY valid JSON with no extra text: {"name":"","dose":"","directions":"","prescriber":"","pharmacy":"","refills":"","ndc":"","patient":""}'}
+          {type:"text",text:'You are reading a prescription bottle label. Extract whatever text is visible, even if the image is partially blurry or cut off. Do your best — use "Unknown" only if a field is truly not visible anywhere on the label.\n\nALSO infer a dosing schedule from the directions text. Map natural-language directions to structured fields:\n- "once daily", "every morning", "at bedtime" → frequency:"Daily", times:["08:00"] or ["21:00"] for bedtime\n- "twice daily", "every 12 hours", "BID" → frequency:"Twice daily", times:["08:00","20:00"]\n- "three times daily", "every 8 hours", "TID" → frequency:"Three times daily", times:["08:00","14:00","20:00"]\n- "four times daily", "every 6 hours", "QID" → frequency:"Four times daily", times:["08:00","12:00","16:00","20:00"]\n- "as needed", "PRN" → frequency:"As needed", times:[]\n- "every other day" → frequency:"Every other day", times:["08:00"]\n- "weekly" → frequency:"Weekly", times:["08:00"]\nIf the directions specify a particular time of day (morning, noon, evening, bedtime), reflect it in the times array. Use 24-hour HH:MM format. If frequency is unclear, default to Daily at 08:00.\n\nReturn ONLY valid JSON with no extra text: {"name":"","dose":"","directions":"","prescriber":"","pharmacy":"","refills":"","ndc":"","patient":"","frequency":"Daily","times":["08:00"],"withFood":false,"specialInstructions":""}'}
         ]}]);
         setState({scanActive:false, scanResult:result});
       } catch(e) {
@@ -923,7 +1262,39 @@ ${toastHTML}
     </button>`).join("")}
 </nav>
 
-<main>${buildView(filtered, taken, pending, pct, weekDays)}</main>`;
+<main>${buildView(filtered, taken, pending, pct, weekDays)}</main>
+${state.activeReminder ? buildReminderBanner() : ""}`;
+}
+
+function buildReminderBanner() {
+  const r = state.activeReminder;
+  const med = state.meds.find(m => m.id === r.medId);
+  const personColor = getColor(r.person);
+  return `
+<div class="reminder-overlay">
+  <div class="reminder-card">
+    <div class="reminder-header">
+      <div class="reminder-pulse">⏰</div>
+      <div class="reminder-title">Time for your medication</div>
+    </div>
+    <div class="reminder-med">
+      <div class="reminder-med-name">${r.medName}</div>
+      ${med && med.dose ? `<div class="reminder-med-dose">${med.dose}</div>` : ""}
+      <div class="reminder-med-meta">
+        <span class="reminder-person-dot" style="background:${personColor}"></span>
+        <span>${r.person}</span>
+        <span style="opacity:.5">·</span>
+        <span>${formatTime12(r.time)}</span>
+      </div>
+      ${med && med.withFood ? `<div class="reminder-food-tag">🍽 Take with food</div>` : ""}
+    </div>
+    <div class="reminder-actions">
+      <button class="reminder-btn reminder-btn-take" data-action="reminderTake">✓ Take Now</button>
+      <button class="reminder-btn reminder-btn-snooze" data-action="reminderSnooze">⏰ Snooze 15min</button>
+      <button class="reminder-btn reminder-btn-skip" data-action="reminderSkip">Skip This Dose</button>
+    </div>
+  </div>
+</div>`;
 }
 
 function buildView(filtered, taken, pending, pct, weekDays) {
@@ -937,6 +1308,7 @@ function buildView(filtered, taken, pending, pct, weekDays) {
     case "emergency": return buildEmergency();
     case "report": return buildReport(filtered);
     case "schedule": return buildSchedule(filtered, weekDays);
+    case "confirmSchedule": return buildConfirmSchedule();
     default: return buildDashboard(filtered, taken, pending, pct);
   }
 }
@@ -1033,7 +1405,7 @@ function buildScan() {
 <div class="scan-card">
   <div class="scan-frame ${state.scanActive?"active":""}">
     ${state.scanImagePreview?`<img class="scan-img" src="${state.scanImagePreview}"/>`:`<div class="scan-placeholder"><div class="icon">📋</div><div>Take a photo of your<br/>prescription label</div></div>`}
-    ${state.scanActive?`<div class="scan-overlay">Reading label with AI…</div>`:""}
+    ${state.scanActive?`<div class="scan-overlay">Reading label & building schedule…</div>`:""}
   </div>
   <div class="scan-btn-row">
     <label class="scan-btn">📷 Take Photo<input type="file" accept="image/*" capture="environment" style="display:none" data-upload="scan"/></label>
@@ -1044,10 +1416,69 @@ function buildScan() {
     <div class="scan-result-card">
       <div class="scan-result-title">✓ Label Read Successfully</div>
       ${[["Medication",state.scanResult.name],["Dose",state.scanResult.dose],["Directions",state.scanResult.directions],["Prescriber",state.scanResult.prescriber],["Pharmacy",state.scanResult.pharmacy],["Refills",state.scanResult.refills],["Patient",state.scanResult.patient]].filter(([,v])=>v&&v!=="Not found").map(([k,v])=>`<div class="scan-row"><span class="scan-key">${k}</span><span class="scan-val">${v}</span></div>`).join("")}
-      <button class="submit-btn" data-action="addFromScan" style="margin-top:14px">+ Add to My Medications</button>
+      <button class="submit-btn" data-action="addFromScan" style="margin-top:14px">Review Schedule →</button>
       <button class="scan-btn" style="margin-top:8px;font-size:13px" data-action="clearScan">Scan Another</button>
     </div>`:""}
   <div class="hint-text">Claude AI reads your label automatically. Works best with clear, well-lit photos.</div>
+</div>`;
+}
+
+function buildConfirmSchedule() {
+  const c = state.scheduleConfirm;
+  if (!c) return `<div class="empty-state">No schedule to confirm.</div>`;
+  const FREQ_OPTIONS = ["Daily","Twice daily","Three times daily","Four times daily","Every other day","Weekly","As needed"];
+  return `
+<div class="section-header">
+  <button class="back-btn" data-action="cancelConfirmSchedule">← Back</button>
+  <span>Confirm Reminder Schedule</span>
+</div>
+<div class="form-card">
+  <div style="background:#2a3a28;border-left:3px solid #8cc49a;padding:10px 12px;border-radius:8px;margin-bottom:14px;font-size:13px;color:#d9e8d0;line-height:1.5">
+    ✓ AI read your label. Review the schedule below and adjust if needed before saving.
+  </div>
+
+  <label class="form-label">Medication Name
+    <input class="form-input" id="cs-name" value="${(c.name||"").replace(/"/g,"&quot;")}"/>
+  </label>
+
+  <label class="form-label">Dose
+    <input class="form-input" id="cs-dose" value="${(c.dose||"").replace(/"/g,"&quot;")}"/>
+  </label>
+
+  <label class="form-label">For
+    <input class="form-input" value="${c.person}" disabled style="opacity:.7"/>
+  </label>
+
+  <label class="form-label">Frequency
+    <select class="form-input" id="cs-freq">
+      ${FREQ_OPTIONS.map(f => `<option value="${f}" ${f===c.frequency?"selected":""}>${f}</option>`).join("")}
+    </select>
+  </label>
+
+  <div class="form-label">Reminder Times</div>
+  <div style="background:#1a1208;border-radius:10px;padding:10px;margin-bottom:12px">
+    ${c.times.length === 0 ? `<div style="color:#7a6a62;font-size:13px;padding:6px 0">No times set (as-needed medication)</div>` :
+      c.times.map((t, i) => `
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <input type="time" class="form-input" data-time-idx="${i}" value="${t}" style="flex:1;margin:0"/>
+          <button class="remove-btn" data-action="removeTimeFromConfirm" data-idx="${i}" style="width:36px;height:36px;flex-shrink:0">×</button>
+        </div>
+      `).join("")
+    }
+    <button class="scan-btn secondary" data-action="addTimeToConfirm" style="margin-top:4px;font-size:13px">+ Add Another Time</button>
+  </div>
+
+  <label class="form-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+    <input type="checkbox" id="cs-food" ${c.withFood?"checked":""} style="width:18px;height:18px;accent-color:#c9a66b"/>
+    <span>Take with food</span>
+  </label>
+
+  ${c.notes ? `<div class="form-label" style="margin-top:14px">Label Details
+    <div style="background:#1a1208;border-radius:8px;padding:10px;font-size:12px;color:#a89682;line-height:1.6">${c.notes}</div>
+  </div>` : ""}
+
+  <button class="submit-btn" data-action="confirmScheduleSave" style="margin-top:18px">✓ Save & Set Reminders</button>
+  <button class="scan-btn" style="margin-top:8px" data-action="cancelConfirmSchedule">Cancel</button>
 </div>`;
 }
 
@@ -1420,6 +1851,13 @@ function handleAction(e) {
     case "submitForm": readFormAndSubmit(); break;
     case "addFromScan": addFromScan(); break;
     case "clearScan": setState({scanResult:null,scanImagePreview:null,scanError:null}); break;
+    case "confirmScheduleSave": confirmScheduleSave(); break;
+    case "cancelConfirmSchedule": cancelConfirmSchedule(); break;
+    case "addTimeToConfirm": addTimeToConfirm(); break;
+    case "removeTimeFromConfirm": removeTimeFromConfirm(parseInt(el.dataset.idx)); break;
+    case "reminderTake": reminderTake(); break;
+    case "reminderSnooze": reminderSnooze(); break;
+    case "reminderSkip": reminderSkip(); break;
     case "setPillTab": setState({pillTab:el.dataset.tab,pillResult:null,pillError:null,pillImage:null,pillImprint:""}); break;
     case "identifyByImprint": identifyByImprint(); break;
     case "clearPill": setState({pillResult:null,pillImage:null,pillImprint:"",pillError:null}); break;
@@ -1621,7 +2059,7 @@ if ('serviceWorker' in navigator) {
         <div class="tut-t">
           <b>About reminders</b> &#9200;<br><br>
           <div style="background:#1a1208;border-radius:10px;padding:10px 12px">
-            <div style="font-size:12px;color:#d9c7b9;line-height:1.7">&#9888;&#65039; <b>Heads up:</b> Push notifications aren't fully active during beta. The app shows you what's due and when, but won't ping your phone yet.<br><br>&#128161; <b>For now:</b> Open the app each morning to check the day's doses, or set a daily phone alarm as a backup.<br><br>&#128640; <b>Coming soon:</b> Real reminders that fire on your phone — even when the app is closed. Your feedback during beta will help us get this right.</div>
+            <div style="font-size:12px;color:#d9c7b9;line-height:1.7">&#9888;&#65039; <b>Heads up:</b> Reminders work in two stages. <b>Stage 1 (live now):</b> When the app is open, you'll get a full-screen reminder with sound and vibration at every dose time, plus snooze and skip options. <b>Stage 2 (coming soon):</b> Phone push notifications when the app is closed.<br><br>&#128161; <b>For now:</b> Keep the app open during the day, or set a daily phone alarm as a backup.<br><br>&#128640; <b>Coming soon:</b> Push notifications even when the app is closed, plus SMS escalation if you miss a dose.</div>
           </div>
         </div>
       </div>
