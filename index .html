@@ -1304,11 +1304,16 @@ Return ONLY valid JSON, no other text:
 {"name":"","dose":"","directions":"","prescriber":"","pharmacy":"","refills":"","ndc":"","patient":"","frequency":"Daily","times":["08:00"],"withFood":false,"specialInstructions":"","confidence":{"name":"high","dose":"high","directions":"high","schedule":"high"}}`}
       ]}], 1500);
 
-      // Validate we got something useful
-      if (!result || !result.name || result.name === "Unknown") {
-        setState({scanActive:false, scanError: "Couldn't read the medication name. Try a clearer photo of the front of the bottle, with good lighting."});
-        logScanError("scan_no_name", JSON.stringify(result||{}), "scan");
+      // Validate we got something useful (lenient — accept partial results)
+      if (!result) {
+        setState({scanActive:false, scanError: "AI didn't return a result. Please try again."});
+        logScanError("scan_empty_result", "no result", "scan");
         return;
+      }
+      // If name is missing or "Unknown", set a placeholder so user can edit it
+      if (!result.name || result.name === "Unknown") {
+        result.name = "(tap to edit)";
+      }
       }
       setState({scanActive:false, scanResult:result});
     } catch(e) {
