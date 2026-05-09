@@ -15,6 +15,26 @@
 <link rel="apple-touch-icon" sizes="167x167" href="/icon-167.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png">
 <title>ScriptSchedule</title>
+<!-- OneSignal Web Push SDK -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+OneSignalDeferred.push(async function(OneSignal) {
+  await OneSignal.init({
+    appId: "39db0c7c-1ad1-4aca-95c0-fb17526401da",
+    serviceWorkerPath: "/sw.js",
+    serviceWorkerParam: { scope: "/" },
+    notifyButton: { enable: false },     // we control the prompt ourselves
+    allowLocalhostAsSecureOrigin: true,
+    autoRegister: false,                 // wait until user enables, don't auto-prompt
+    autoResubscribe: true
+  });
+  // Stash the OneSignal instance so app code can access it
+  window.__OneSignal = OneSignal;
+  // Notify app that OneSignal is ready
+  window.dispatchEvent(new Event("onesignal_ready"));
+});
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:#1e1610;color:#f0e6d8;font-family:Georgia,'Times New Roman',serif;min-height:100vh}
@@ -304,15 +324,9 @@ textarea.form-input{min-height:72px;resize:vertical}
 </head>
 <body>
 <script>
-// Clear old service worker cache so new version loads
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(function(regs) {
-    regs.forEach(function(reg) { reg.unregister(); });
-  });
-  caches.keys().then(function(keys) {
-    keys.forEach(function(key) { caches.delete(key); });
-  });
-}
+// Note: previous versions unregistered service workers on every load to clear
+// stale caches. We now use cache versioning in sw.js instead, so the SW must
+// stay registered to receive push notifications.
 </script>
 <div id="loading">
   <img src="/icon-192.png" alt="ScriptSchedule"/>
@@ -373,7 +387,7 @@ if ('serviceWorker' in navigator) {
           <span class="bg-role-label"><b>Just curious</b><span class="bg-role-sub">Checking it out for now</span></span>
         </button>
       </div>
-      <div class="bg-notice">⏰ <b>Quick heads up:</b> Reminders work when the app is open in your browser. Phone push notifications (when app is closed) are coming soon — for now, please keep a backup phone alarm too!</div>
+      <div class="bg-notice">⏰ <b>Quick heads up:</b> After you add your first medication, we'll ask if you want to enable phone reminders so you get notifications even when the app is closed. iPhone users: install to home screen first.</div>
       <button class="bg-btn" id="bg-role-btn" disabled>Get Started</button>
       <div class="bg-error" id="bg-role-error"></div>
     </div>
@@ -459,7 +473,8 @@ let state = {
   scheduleConfirm: null,    // { person, name, dose, frequency, times, withFood, notes }
   activeReminder: null,     // { medId, time, medName, person, doseKey }
   reminderInterval: null,   // setInterval handle
-  snoozeTimers: {}          // { doseKey: setTimeout handle }
+  snoozeTimers: {},         // { doseKey: setTimeout handle }
+  showPushPrompt: false     // whether to show the "Enable reminders?" modal
 };
 
 // ── STORAGE ──────────────────────────────────────────────────────────────────
@@ -640,6 +655,7 @@ function realInit() {
   document.getElementById("fb-btn").classList.add("show");
   render();
   startReminderEngine();
+  processNotificationUrlParams();
 }
 
 // ── BETA FEEDBACK ────────────────────────────────────────────────────────────
@@ -744,6 +760,7 @@ function deleteMed(id) {
   save("ss:meds", state.meds);
   showToast("Medication removed","info");
   render();
+  cancelMedPushes(id);
 }
 function openAdd() {
   state.editMedId = null;
@@ -757,8 +774,10 @@ function openEdit(med) {
 }
 function submitForm() {
   if (!state.form.name||!state.form.dose) { showToast("Name and dose required","error"); return; }
-  if (state.editMedId) {
-    state.meds = state.meds.map(m=>m.id===state.editMedId?{...m,...state.form}:m);
+  const isEdit = !!state.editMedId;
+  let editedId = state.editMedId;
+  if (isEdit) {
+    state.meds = state.meds.map(m=>m.id===state.editMedId?{...m,...state.form,times:[state.form.time||"08:00"]}:m);
     showToast("✓ Medication updated");
   } else {
     state.meds.push({id:Date.now(),...state.form,times:[state.form.time||"08:00"],doseLog:[],nextDue:"Today "+state.form.time,taken:false});
@@ -766,6 +785,17 @@ function submitForm() {
   }
   save("ss:meds", state.meds);
   setState({view:"meds", editMedId:null});
+
+  // Push notification flow:
+  // - If user already has push enabled, sync the schedule
+  // - If this is their first med and push isn't enabled, prompt them to enable
+  if (pushEnabled()) {
+    if (isEdit && editedId) cancelMedPushes(editedId);
+    setTimeout(() => syncPushSchedule(), 500);
+  } else if (!isEdit && state.meds.length === 1) {
+    // First med added — show the enable-reminders prompt after a short delay
+    setTimeout(() => setState({showPushPrompt: true}), 800);
+  }
 }
 function addPerson() {
   const name = state.newPersonName.trim();
@@ -802,6 +832,7 @@ function addFromScan() {
     frequency: r.frequency || "Daily",
     times: Array.isArray(r.times) && r.times.length ? [...r.times] : ["08:00"],
     withFood: !!r.withFood,
+    confidence: r.confidence || {},
     notes: [
       r.specialInstructions || "",
       r.prescriber ? "Prescriber: "+r.prescriber : "",
@@ -849,6 +880,13 @@ function confirmScheduleSave() {
   save("ss:meds", state.meds);
   showToast("✓ Added with reminder schedule");
   setState({view:"meds", scanResult:null, scanImagePreview:null, scheduleConfirm:null});
+
+  // Push notification flow (same logic as submitForm)
+  if (pushEnabled()) {
+    setTimeout(() => syncPushSchedule(), 500);
+  } else if (state.meds.length === 1) {
+    setTimeout(() => setState({showPushPrompt: true}), 800);
+  }
 }
 
 function cancelConfirmSchedule() {
@@ -879,16 +917,42 @@ function removeTimeFromConfirm(idx) {
 
 // ── CLAUDE API ───────────────────────────────────────────────────────────────
 // ── CLAUDE API ───────────────────────────────────────────────────────────────
-async function callClaude(messages, maxTokens=1200) {
-  const r = await fetch("/.netlify/functions/claude", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:maxTokens,messages})
-  });
-  const d = await r.json();
-  if (d.error) throw new Error(d.error.message);
-  const text = (d.content||[]).find(b=>b.type==="text")?.text||"";
-  return JSON.parse(text.replace(/```json|```/g,"").trim());
+async function callClaude(messages, maxTokens=1200, opts={}) {
+  const maxRetries = opts.retries ?? 1;
+  const timeoutMs = opts.timeout ?? 45000;
+
+  let lastError = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+
+      const r = await fetch("/.netlify/functions/claude", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({model:"claude-sonnet-4-6", max_tokens:maxTokens, messages}),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutHandle);
+
+      const d = await r.json();
+      if (d.error) throw new Error(d.error.message || "api_error");
+      const text = (d.content||[]).find(b=>b.type==="text")?.text || "";
+      return extractJSON(text);
+    } catch(e) {
+      lastError = e;
+      const isAbort = e.name === "AbortError";
+      const isNetwork = (e.message||"").toLowerCase().includes("fetch") ||
+                        (e.message||"").toLowerCase().includes("network");
+      // Only retry on network/timeout, not on API or parse errors
+      if ((isAbort || isNetwork) && attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError;
 }
 
 // ── REMINDER ENGINE ──────────────────────────────────────────────────────────
@@ -1086,6 +1150,204 @@ function startReminderEngine() {
   state.reminderInterval = setInterval(checkReminders, 60000);
 }
 
+// ── PUSH NOTIFICATIONS ──────────────────────────────────────────────────────
+// Orchestrates OneSignal push subscription + scheduling reminders via our
+// Netlify serverless functions.
+
+// Has the user enabled push notifications? (cached locally)
+function pushEnabled() {
+  try { return localStorage.getItem("ss:push_enabled") === "true"; } catch(e) { return false; }
+}
+
+function setPushEnabled(v) {
+  try { localStorage.setItem("ss:push_enabled", v ? "true" : "false"); } catch(e) {}
+}
+
+// Get the OneSignal subscription ID (the unique ID for this device)
+async function getSubscriptionId() {
+  if (!window.__OneSignal) return null;
+  try {
+    const id = window.__OneSignal.User?.PushSubscription?.id;
+    return id || null;
+  } catch(e) { return null; }
+}
+
+// Detect if user is on an iPhone NOT installed to home screen
+function isIosBrowserNotInstalled() {
+  const ua = navigator.userAgent || "";
+  const isIos = /iPhone|iPad|iPod/.test(ua);
+  if (!isIos) return false;
+  // Standalone mode means installed to home screen
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches ||
+                       window.navigator.standalone === true;
+  return !isStandalone;
+}
+
+// Ask user to enable push notifications. Shows a friendly prompt first,
+// then triggers the browser permission prompt only if they tap Yes.
+async function requestPushPermission() {
+  // Check if iOS user needs to install to home screen first
+  if (isIosBrowserNotInstalled()) {
+    showToast("iPhone users: add ScriptSchedule to Home Screen first (Share → Add to Home Screen), then open from there.", "info");
+    return false;
+  }
+
+  if (!window.__OneSignal) {
+    showToast("Notifications not ready yet — please wait a moment.", "error");
+    return false;
+  }
+
+  try {
+    // Trigger OneSignal's slidedown prompt (shows browser permission UI)
+    const result = await window.__OneSignal.Notifications.requestPermission();
+    if (result) {
+      setPushEnabled(true);
+      showToast("✓ Reminders enabled");
+      // Schedule pushes for all current meds
+      setTimeout(() => syncPushSchedule(), 1500);
+      return true;
+    } else {
+      showToast("Notifications blocked. You can enable them in browser settings.", "error");
+      return false;
+    }
+  } catch (e) {
+    console.warn("Push permission error:", e);
+    showToast("Couldn't enable notifications. Try again or check browser settings.", "error");
+    return false;
+  }
+}
+
+// Sync the user's medication schedule to OneSignal scheduled pushes
+// Called when meds change (added, edited, deleted) and on app load
+async function syncPushSchedule() {
+  if (!pushEnabled()) return;
+  const subscriptionId = await getSubscriptionId();
+  if (!subscriptionId) {
+    console.warn("No subscription ID — push disabled?");
+    return;
+  }
+  // Filter meds that have actual schedules (skip "as needed")
+  const scheduleableMeds = state.meds
+    .filter(m => m.frequency !== "As needed" && m.times && m.times.length > 0)
+    .map(m => ({
+      id: m.id,
+      name: m.name,
+      dose: m.dose,
+      person: m.person,
+      times: m.times,
+      frequency: m.frequency
+    }));
+
+  if (scheduleableMeds.length === 0) return;
+
+  try {
+    const r = await fetch("/.netlify/functions/schedule-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subscriptionId,
+        meds: scheduleableMeds,
+        daysAhead: 7
+      })
+    });
+    const data = await r.json();
+    if (!data.ok && data.error) {
+      console.warn("Schedule push warning:", data);
+    }
+    // Track last sync time so we don't re-sync constantly
+    try { localStorage.setItem("ss:last_push_sync", String(Date.now())); } catch(e) {}
+  } catch (e) {
+    console.warn("Schedule push fetch error:", e);
+  }
+}
+
+// Cancel scheduled pushes for a specific med (called when med is deleted)
+async function cancelMedPushes(medId) {
+  if (!pushEnabled()) return;
+  try {
+    await fetch("/.netlify/functions/cancel-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ medId, daysAhead: 7 })
+    });
+  } catch (e) {
+    console.warn("Cancel push error:", e);
+  }
+}
+
+// Re-sync schedule periodically (push schedule needs refresh as it ages)
+function maybeResyncPushes() {
+  if (!pushEnabled()) return;
+  let lastSync = 0;
+  try { lastSync = parseInt(localStorage.getItem("ss:last_push_sync") || "0", 10); } catch(e) {}
+  const oneDay = 24 * 60 * 60 * 1000;
+  if (Date.now() - lastSync > oneDay) {
+    syncPushSchedule();
+  }
+}
+
+// Handle action buttons clicked from push notifications.
+// The service worker passes the action via postMessage OR via URL query string.
+function handleNotificationAction(action, medId, doseTime) {
+  if (!action || !medId) return;
+  const med = state.meds.find(m => m.id === parseInt(medId));
+  if (!med) return;
+  // doseTime format: "2026-05-09T08:00" — extract just the time part
+  const timePart = doseTime && doseTime.includes("T") ? doseTime.split("T")[1] : "08:00";
+  const datePart = doseTime && doseTime.includes("T") ? doseTime.split("T")[0] : todayStr();
+  const key = doseKey(med.id, datePart, timePart);
+
+  if (action === "take") {
+    logDoseAction(med.id, key, "taken");
+    // Update legacy taken flag for backward compat
+    state.meds = state.meds.map(m => m.id === med.id ? {...m, taken: true} : m);
+    save("ss:meds", state.meds);
+    showToast("✓ Logged as taken");
+    render();
+  } else if (action === "snooze") {
+    logDoseAction(med.id, key, "snoozed", { snoozedUntil: Date.now() + 15*60*1000 });
+    showToast("⏰ Snoozed 15 minutes");
+  } else if (action === "skip") {
+    logDoseAction(med.id, key, "skipped");
+    showToast("Dose skipped", "info");
+    render();
+  }
+}
+
+// Listen for messages from the service worker (from notification clicks)
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    const msg = event.data;
+    if (msg && msg.type === "notification_action") {
+      handleNotificationAction(msg.action, msg.medId, msg.doseTime);
+    }
+  });
+}
+
+// Listen for OneSignal ready event
+window.addEventListener("onesignal_ready", () => {
+  // If user previously enabled push, re-sync schedule
+  setTimeout(() => maybeResyncPushes(), 2000);
+});
+
+// Process URL parameters from notification action clicks (when app opens from a tap)
+function processNotificationUrlParams() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+    const medId = params.get("med");
+    const doseTime = params.get("t");
+    if (action && medId) {
+      // Wait for app to be loaded before handling
+      setTimeout(() => {
+        handleNotificationAction(action, medId, doseTime);
+        // Clean URL so refresh doesn't re-fire
+        window.history.replaceState({}, "", "/");
+      }, 1000);
+    }
+  } catch(e) {}
+}
+
 // ── SCAN ERROR LOGGING ──────────────────────────────────────────────────────
 async function logScanError(errorType, details, mode) {
   try {
@@ -1112,27 +1374,202 @@ async function logScanError(errorType, details, mode) {
   } catch(e) {}
 }
 
+// ── IMAGE PREPROCESSING ─────────────────────────────────────────────────────
+// Resize/compress an image file before sending to API.
+// Returns { base64, mediaType, width, height, sizeKB } or throws.
+async function preprocessImage(file, opts={}) {
+  const maxDim = opts.maxDim || 1600;
+  const quality = opts.quality || 0.85;
+
+  // Read file as data URL
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = () => reject(new Error("read_failed"));
+    reader.readAsDataURL(file);
+  });
+
+  // Load into Image element (this also handles HEIC->fallback in some browsers)
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error("decode_failed"));
+    i.src = dataUrl;
+  });
+
+  // Quick quality check
+  if (img.width < 200 || img.height < 200) {
+    throw new Error("too_small");
+  }
+
+  // Calculate target dimensions (longest edge = maxDim)
+  let { width, height } = img;
+  if (width > maxDim || height > maxDim) {
+    if (width > height) {
+      height = Math.round(height * (maxDim / width));
+      width = maxDim;
+    } else {
+      width = Math.round(width * (maxDim / height));
+      height = maxDim;
+    }
+  }
+
+  // Draw to canvas and re-encode as JPEG (smaller + universally supported)
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, width, height);
+
+  // Brightness check — sample a grid of pixels and look for "too dark"
+  try {
+    const sample = ctx.getImageData(0, 0, width, height);
+    const data = sample.data;
+    let totalBrightness = 0;
+    let samples = 0;
+    const stride = Math.max(1, Math.floor(data.length / 4 / 1000)); // ~1000 samples
+    for (let i = 0; i < data.length; i += 4 * stride) {
+      // perceived brightness
+      totalBrightness += (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114);
+      samples++;
+    }
+    const avgBrightness = totalBrightness / samples;
+    if (avgBrightness < 30) {
+      throw new Error("too_dark");
+    }
+  } catch (e) {
+    if (e.message === "too_dark") throw e;
+    // Other canvas errors (e.g. tainted canvas) — just skip the brightness check
+  }
+
+  const outDataUrl = canvas.toDataURL("image/jpeg", quality);
+  const base64 = outDataUrl.split(",")[1];
+  const sizeKB = Math.round(base64.length * 0.75 / 1024);
+
+  return {
+    base64,
+    mediaType: "image/jpeg",
+    dataUrl: outDataUrl,
+    width,
+    height,
+    sizeKB
+  };
+}
+
+// ── ROBUST JSON PARSING ─────────────────────────────────────────────────────
+function extractJSON(text) {
+  if (!text) throw new Error("empty_response");
+  // Strip markdown fences
+  let cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  // Try direct parse
+  try { return JSON.parse(cleaned); } catch(e) {}
+  // Try to extract first {...} block (handles prose around JSON)
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch(e) {}
+  }
+  throw new Error("invalid_json");
+}
+
+// ── FRIENDLY ERROR MESSAGES ─────────────────────────────────────────────────
+function friendlyScanError(errType, rawMessage) {
+  const map = {
+    too_small: "That photo is too small. Try moving closer to the bottle and retake.",
+    too_dark: "Photo is too dark. Try better lighting or move under a lamp.",
+    decode_failed: "Couldn't open that image. Try a JPEG or PNG photo (HEIC may not work in this browser).",
+    read_failed: "Couldn't read the file. Try a different photo.",
+    invalid_json: "AI gave an unexpected response. Please try again — usually works on the second try.",
+    empty_response: "AI didn't respond. Please check your internet and try again.",
+    network: "Connection issue. Check your internet and try again.",
+    timeout: "The scan took too long. Try a clearer, well-lit photo."
+  };
+  if (map[errType]) return map[errType];
+  // Detect network errors from raw message
+  const m = (rawMessage || "").toLowerCase();
+  if (m.includes("network") || m.includes("fetch") || m.includes("failed to fetch")) return map.network;
+  if (m.includes("timeout") || m.includes("aborted")) return map.timeout;
+  return "Couldn't read the label. Try a clearer, well-lit photo or a different angle.";
+}
+
+
 async function handleImageUpload(file, mode) {
   if (!file) return;
+
+  // SCAN mode — uses the new preprocessing pipeline
+  if (mode === "scan") {
+    setState({scanImagePreview:null, scanActive:true, scanResult:null, scanError:null});
+    let prepped;
+    try {
+      prepped = await preprocessImage(file, {maxDim:1600, quality:0.85});
+    } catch(e) {
+      const errType = e.message || "read_failed";
+      setState({scanActive:false, scanError: friendlyScanError(errType)});
+      logScanError("preprocess_"+errType, e.message||String(e), "scan");
+      return;
+    }
+    setState({scanImagePreview: prepped.dataUrl});
+    try {
+      const result = await callClaude([{role:"user",content:[
+        {type:"image",source:{type:"base64",media_type:prepped.mediaType,data:prepped.base64}},
+        {type:"text",text:`You are reading a prescription medication bottle label. Real-world photos may be blurry, glare-affected, partially obscured by stickers, curved, or only show part of the label. Extract every field you can identify confidently and use "Unknown" only when truly nothing readable is present for that field.
+
+LABEL READING TIPS:
+- Pharmacy labels typically have: medication name (often largest text), strength/dose (e.g. "10mg", "500 MG"), directions (e.g. "Take 1 tablet by mouth twice daily"), prescriber/doctor name, pharmacy name, refills count, NDC number, patient name.
+- The medication name is usually the GENERIC name in caps (e.g. "LISINOPRIL"). The brand name may appear in parentheses or smaller (e.g. "(Zestril)"). Prefer the generic name for "name" field.
+- Common pharmacies: CVS, Walgreens, Walmart, Costco, Kroger, Publix, HEB, Rite Aid, Express Scripts, OptumRx, mail-order pharmacies. The pharmacy name is often at the top of the label.
+- Vet/pet medications may say "For animal use only" and list the pet's name as patient.
+- If multiple labels are stacked (e.g. warning sticker over main label), read what you can from each.
+- "Take with food" or "Take on empty stomach" is usually on a colored sticker — capture in specialInstructions.
+
+DOSING SCHEDULE INFERENCE:
+Map directions text to structured fields:
+- "once daily", "every morning", "QD" → frequency:"Daily", times:["08:00"]
+- "at bedtime", "QHS", "at night" → frequency:"Daily", times:["21:00"]
+- "twice daily", "every 12 hours", "BID" → frequency:"Twice daily", times:["08:00","20:00"]
+- "three times daily", "every 8 hours", "TID" → frequency:"Three times daily", times:["08:00","14:00","20:00"]
+- "four times daily", "every 6 hours", "QID" → frequency:"Four times daily", times:["08:00","12:00","16:00","20:00"]
+- "as needed", "PRN" → frequency:"As needed", times:[]
+- "every other day" → frequency:"Every other day", times:["08:00"]
+- "weekly" → frequency:"Weekly", times:["08:00"]
+If frequency is unclear or not visible, default to Daily at 08:00.
+
+CONFIDENCE: Rate each major field as "high" (clearly readable), "medium" (best guess), or "low" (unclear/inferred).
+
+Return ONLY valid JSON, no other text:
+{"name":"","dose":"","directions":"","prescriber":"","pharmacy":"","refills":"","ndc":"","patient":"","frequency":"Daily","times":["08:00"],"withFood":false,"specialInstructions":"","confidence":{"name":"high","dose":"high","directions":"high","schedule":"high"}}`}
+      ]}], 1500);
+
+      // Validate we got something useful
+      if (!result || !result.name || result.name === "Unknown") {
+        setState({scanActive:false, scanError: "Couldn't read the medication name. Try a clearer photo of the front of the bottle, with good lighting."});
+        logScanError("scan_no_name", JSON.stringify(result||{}), "scan");
+        return;
+      }
+      setState({scanActive:false, scanResult:result});
+    } catch(e) {
+      const errType = e.message || "scan_failed";
+      setState({scanActive:false, scanError: friendlyScanError(errType, e.message)});
+      logScanError("scan_failed", e.message||String(e), "scan");
+    }
+    return;
+  }
+
+  // PILL and DOC modes — preprocess for size, fall back to raw on failure
   const reader = new FileReader();
   reader.onload = async (ev) => {
     const base64 = ev.target.result.split(",")[1];
     const mt = file.type;
-    if (mode==="scan") {
-      setState({scanImagePreview:ev.target.result, scanActive:true, scanResult:null, scanError:null});
+    if (mode==="pill") {
+      let imageBlock;
       try {
-        const result = await callClaude([{role:"user",content:[
-          {type:"image",source:{type:"base64",media_type:mt,data:base64}},
-          {type:"text",text:'You are reading a prescription bottle label. Extract whatever text is visible, even if the image is partially blurry or cut off. Do your best — use "Unknown" only if a field is truly not visible anywhere on the label.\n\nALSO infer a dosing schedule from the directions text. Map natural-language directions to structured fields:\n- "once daily", "every morning", "at bedtime" → frequency:"Daily", times:["08:00"] or ["21:00"] for bedtime\n- "twice daily", "every 12 hours", "BID" → frequency:"Twice daily", times:["08:00","20:00"]\n- "three times daily", "every 8 hours", "TID" → frequency:"Three times daily", times:["08:00","14:00","20:00"]\n- "four times daily", "every 6 hours", "QID" → frequency:"Four times daily", times:["08:00","12:00","16:00","20:00"]\n- "as needed", "PRN" → frequency:"As needed", times:[]\n- "every other day" → frequency:"Every other day", times:["08:00"]\n- "weekly" → frequency:"Weekly", times:["08:00"]\nIf the directions specify a particular time of day (morning, noon, evening, bedtime), reflect it in the times array. Use 24-hour HH:MM format. If frequency is unclear, default to Daily at 08:00.\n\nReturn ONLY valid JSON with no extra text: {"name":"","dose":"","directions":"","prescriber":"","pharmacy":"","refills":"","ndc":"","patient":"","frequency":"Daily","times":["08:00"],"withFood":false,"specialInstructions":""}'}
-        ]}]);
-        setState({scanActive:false, scanResult:result});
+        const prepped = await preprocessImage(file, {maxDim:1600, quality:0.85});
+        setState({pillImage:prepped.dataUrl, pillLoading:true, pillResult:null, pillError:null});
+        imageBlock = {type:"image",source:{type:"base64",media_type:prepped.mediaType,data:prepped.base64}};
       } catch(e) {
-        setState({scanActive:false, scanError:"Couldn't read the label. Try a clearer photo."});
-        logScanError("scan_failed", e.message||String(e), "scan");
+        setState({pillImage:ev.target.result, pillLoading:true, pillResult:null, pillError:null});
+        imageBlock = {type:"image",source:{type:"base64",media_type:mt,data:base64}};
       }
-    } else if (mode==="pill") {
-      setState({pillImage:ev.target.result, pillLoading:true, pillResult:null, pillError:null});
-      await runPillIdentify({type:"image",source:{type:"base64",media_type:mt,data:base64}});
+      await runPillIdentify(imageBlock);
     } else if (mode==="doc") {
       const person = state.docsPerson||state.people[0];
       setState({docUploading:true});
@@ -1263,7 +1700,35 @@ ${toastHTML}
 </nav>
 
 <main>${buildView(filtered, taken, pending, pct, weekDays)}</main>
-${state.activeReminder ? buildReminderBanner() : ""}`;
+${state.activeReminder ? buildReminderBanner() : ""}
+${state.showPushPrompt ? buildPushPrompt() : ""}`;
+}
+
+function buildPushPrompt() {
+  const isIos = isIosBrowserNotInstalled();
+  return `
+<div class="reminder-overlay">
+  <div class="reminder-card">
+    <div class="reminder-header">
+      <div style="font-size:32px">🔔</div>
+      <div class="reminder-title">Never miss a dose</div>
+    </div>
+    <div style="margin-bottom:18px">
+      <div style="font-family:Georgia,serif;font-size:20px;font-weight:700;color:#f0e6d8;margin-bottom:10px;line-height:1.3">Enable phone reminders?</div>
+      <div style="font-size:14px;color:#d9c7b9;line-height:1.6">
+        Get a notification on your phone at every dose time, even when ScriptSchedule is closed.
+      </div>
+      ${isIos ? `
+      <div style="background:#3a3010;border-left:3px solid #e8c878;padding:10px 12px;border-radius:8px;margin-top:14px;font-size:13px;color:#f0e0c0;line-height:1.5">
+        <b>iPhone tip:</b> First add ScriptSchedule to your Home Screen (Safari → Share → Add to Home Screen), then tap Enable from inside the home-screen app.
+      </div>` : ""}
+    </div>
+    <div class="reminder-actions">
+      <button class="reminder-btn reminder-btn-take" data-action="enablePush">🔔 Enable Reminders</button>
+      <button class="reminder-btn reminder-btn-snooze" data-action="dismissPushPrompt">Maybe Later</button>
+    </div>
+  </div>
+</div>`;
 }
 
 function buildReminderBanner() {
@@ -1405,7 +1870,7 @@ function buildScan() {
 <div class="scan-card">
   <div class="scan-frame ${state.scanActive?"active":""}">
     ${state.scanImagePreview?`<img class="scan-img" src="${state.scanImagePreview}"/>`:`<div class="scan-placeholder"><div class="icon">📋</div><div>Take a photo of your<br/>prescription label</div></div>`}
-    ${state.scanActive?`<div class="scan-overlay">Reading label & building schedule…</div>`:""}
+    ${state.scanActive?`<div class="scan-overlay">Optimizing photo & reading label…</div>`:""}
   </div>
   <div class="scan-btn-row">
     <label class="scan-btn">📷 Take Photo<input type="file" accept="image/*" capture="environment" style="display:none" data-upload="scan"/></label>
@@ -1419,7 +1884,7 @@ function buildScan() {
       <button class="submit-btn" data-action="addFromScan" style="margin-top:14px">Review Schedule →</button>
       <button class="scan-btn" style="margin-top:8px;font-size:13px" data-action="clearScan">Scan Another</button>
     </div>`:""}
-  <div class="hint-text">Claude AI reads your label automatically. Works best with clear, well-lit photos.</div>
+  <div class="hint-text">📸 <b>Best results:</b> Hold bottle flat, fill the frame, use bright light, avoid glare. Multiple stickers OK — we'll read what we can.</div>
 </div>`;
 }
 
@@ -1427,21 +1892,30 @@ function buildConfirmSchedule() {
   const c = state.scheduleConfirm;
   if (!c) return `<div class="empty-state">No schedule to confirm.</div>`;
   const FREQ_OPTIONS = ["Daily","Twice daily","Three times daily","Four times daily","Every other day","Weekly","As needed"];
+  const conf = c.confidence || {};
+  const lowFields = ["name","dose","directions","schedule"].filter(f => conf[f] === "low");
+  const hasLow = lowFields.length > 0;
+  const fieldHint = (key) => {
+    if (conf[key] === "low") return `<span style="display:inline-block;background:#3a3010;color:#e8c878;font-size:11px;padding:2px 8px;border-radius:8px;margin-left:8px;font-weight:600">⚠ Double-check</span>`;
+    if (conf[key] === "medium") return `<span style="display:inline-block;color:#a89682;font-size:11px;margin-left:8px">~ verify</span>`;
+    return "";
+  };
+  const banner = hasLow
+    ? `<div style="background:#3a3010;border-left:3px solid #e8c878;padding:10px 12px;border-radius:8px;margin-bottom:14px;font-size:13px;color:#f0e0c0;line-height:1.5">⚠️ AI wasn't 100% sure on some fields. Please review the highlighted ones before saving.</div>`
+    : `<div style="background:#2a3a28;border-left:3px solid #8cc49a;padding:10px 12px;border-radius:8px;margin-bottom:14px;font-size:13px;color:#d9e8d0;line-height:1.5">✓ AI read your label. Review the schedule below and adjust if needed before saving.</div>`;
   return `
 <div class="section-header">
   <button class="back-btn" data-action="cancelConfirmSchedule">← Back</button>
   <span>Confirm Reminder Schedule</span>
 </div>
 <div class="form-card">
-  <div style="background:#2a3a28;border-left:3px solid #8cc49a;padding:10px 12px;border-radius:8px;margin-bottom:14px;font-size:13px;color:#d9e8d0;line-height:1.5">
-    ✓ AI read your label. Review the schedule below and adjust if needed before saving.
-  </div>
+  ${banner}
 
-  <label class="form-label">Medication Name
+  <label class="form-label">Medication Name${fieldHint("name")}
     <input class="form-input" id="cs-name" value="${(c.name||"").replace(/"/g,"&quot;")}"/>
   </label>
 
-  <label class="form-label">Dose
+  <label class="form-label">Dose${fieldHint("dose")}
     <input class="form-input" id="cs-dose" value="${(c.dose||"").replace(/"/g,"&quot;")}"/>
   </label>
 
@@ -1449,7 +1923,7 @@ function buildConfirmSchedule() {
     <input class="form-input" value="${c.person}" disabled style="opacity:.7"/>
   </label>
 
-  <label class="form-label">Frequency
+  <label class="form-label">Frequency${fieldHint("schedule")}
     <select class="form-input" id="cs-freq">
       ${FREQ_OPTIONS.map(f => `<option value="${f}" ${f===c.frequency?"selected":""}>${f}</option>`).join("")}
     </select>
@@ -1858,6 +2332,12 @@ function handleAction(e) {
     case "reminderTake": reminderTake(); break;
     case "reminderSnooze": reminderSnooze(); break;
     case "reminderSkip": reminderSkip(); break;
+    case "enablePush": {
+      setState({showPushPrompt: false});
+      requestPushPermission();
+      break;
+    }
+    case "dismissPushPrompt": setState({showPushPrompt: false}); break;
     case "setPillTab": setState({pillTab:el.dataset.tab,pillResult:null,pillError:null,pillImage:null,pillImprint:""}); break;
     case "identifyByImprint": identifyByImprint(); break;
     case "clearPill": setState({pillResult:null,pillImage:null,pillImprint:"",pillError:null}); break;
@@ -2059,7 +2539,7 @@ if ('serviceWorker' in navigator) {
         <div class="tut-t">
           <b>About reminders</b> &#9200;<br><br>
           <div style="background:#1a1208;border-radius:10px;padding:10px 12px">
-            <div style="font-size:12px;color:#d9c7b9;line-height:1.7">&#9888;&#65039; <b>Heads up:</b> Reminders work in two stages. <b>Stage 1 (live now):</b> When the app is open, you'll get a full-screen reminder with sound and vibration at every dose time, plus snooze and skip options. <b>Stage 2 (coming soon):</b> Phone push notifications when the app is closed.<br><br>&#128161; <b>For now:</b> Keep the app open during the day, or set a daily phone alarm as a backup.<br><br>&#128640; <b>Coming soon:</b> Push notifications even when the app is closed, plus SMS escalation if you miss a dose.</div>
+            <div style="font-size:12px;color:#d9c7b9;line-height:1.7">⏰ <b>Two layers of reminders:</b><br><br><b>1. In-app:</b> When the app is open, you'll get a full-screen reminder with sound and vibration at every dose time.<br><br><b>2. Phone notifications:</b> Even when ScriptSchedule is closed, you can get a push notification on your phone. We'll ask permission after you add your first medication. (iPhone users: install to home screen first via Safari → Share → Add to Home Screen.)<br><br>💡 <b>Coming soon:</b> SMS backup if you miss a dose.</div>
           </div>
         </div>
       </div>
