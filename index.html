@@ -348,6 +348,13 @@ textarea.form-input{min-height:72px;resize:vertical}
       <button class="bg-btn" id="bg-code-btn">Continue</button>
       <div class="bg-error" id="bg-code-error"></div>
       <div class="bg-footer">Don't have a code? Reach out to Cynthia.</div>
+      <div class="bg-footer"><a href="#" id="bg-signin-toggle">Already have an account? Sign in</a></div>
+      <div id="bg-signin-panel" style="display:none;margin-top:14px">
+        <input type="email" id="bg-signin-email" class="bg-input" placeholder="Email address" autocomplete="email"/>
+        <input type="password" id="bg-signin-password" class="bg-input" placeholder="Password" autocomplete="current-password"/>
+        <button class="bg-btn" id="bg-signin-btn">Sign In</button>
+        <div class="bg-error" id="bg-signin-error"></div>
+      </div>
     </div>
 
     <!-- STEP 2: Name + Email -->
@@ -358,6 +365,7 @@ textarea.form-input{min-height:72px;resize:vertical}
       <input type="text" id="bg-name" class="bg-input" placeholder="Your name" autocomplete="name"/>
       <input type="email" id="bg-email" class="bg-input" placeholder="Email address" autocomplete="email"/>
       <input type="password" id="bg-password" class="bg-input" placeholder="Create a password (6+ characters)" autocomplete="new-password"/>
+      <input type="text" id="bg-invite-code" class="bg-input" placeholder="Invite code from a family member (optional)" autocomplete="off" autocapitalize="none"/>
       <button class="bg-btn" id="bg-info-btn">Continue</button>
       <div class="bg-error" id="bg-info-error"></div>
     </div>
@@ -476,7 +484,9 @@ let state = {
   activeReminder: null,     // { medId, time, medName, person, doseKey }
   reminderInterval: null,   // setInterval handle
   snoozeTimers: {},         // { doseKey: setTimeout handle }
-  showPushPrompt: false     // whether to show the "Enable reminders?" modal
+  showPushPrompt: false,    // whether to show the "Enable reminders?" modal
+  inviteCode: null,         // generated household_invites.code, shown after "Invite a family member"
+  inviteGenerating: false
 };
 
 // ── STORAGE ──────────────────────────────────────────────────────────────────
@@ -508,35 +518,75 @@ const SUPABASE_URL = "https://txaezqhbtjbtbxwlveoq.supabase.co";
 const SUPABASE_KEY = "sb_publishable_DMnbXfeIUUEFf3OICUE-fA_N3gfZZcw";
 const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Creates a Supabase login for this person (or signs them in if they already
-// have one), then makes sure they have a household to belong to. Runs quietly
-// in the background — if it fails, the app still works locally as before.
-async function setupSupabaseAccount(name, email, password) {
+// Cloud sync state — populated once a household is known (see realInit()).
+// householdId lives only in memory (the old ss:household_id localStorage key
+// was write-only and never read back, so there's nothing to migrate from).
+state.householdId = null;
+state.familyMembers = [];         // [{id, name, kind, color}] from the family_members table
+state.doseEventsByMedId = {};     // { [medId]: [{id,dose_date,dose_time,status,...}] } — flat, not nested per-med, so a single Realtime event patches one entry cheaply
+let householdChannel = null;
+
+// Resolve a family_members.id from a display name (medications/emergency/docs
+// keep using the name string as their join key, exactly like today).
+function familyMemberIdForName(name) {
+  const fm = state.familyMembers.find(f => f.name === name);
+  return fm ? fm.id : null;
+}
+
+// Dose-log accessor — replaces direct med.doseLog reads so the flat
+// doseEventsByMedId map can back it instead without touching every call site.
+function getDoseLog(med) {
+  return state.doseEventsByMedId[med.id] || [];
+}
+
+// Thin write-through wrappers: local state + localStorage are always updated
+// first (existing behavior), these just mirror the change to Supabase in the
+// background. Errors are swallowed (console.warn only) so a network hiccup
+// never blocks the local-first save the app already relies on.
+async function cloudUpsert(table, row, onConflict) {
   try {
-    let user = null;
+    const q = onConflict ? sbClient.from(table).upsert(row, { onConflict }) : sbClient.from(table).upsert(row);
+    const { data, error } = await q.select().single();
+    if (error) { console.warn(`cloudUpsert(${table}) failed`, error); return null; }
+    return data;
+  } catch (e) {
+    console.warn(`cloudUpsert(${table}) failed`, e);
+    return null;
+  }
+}
+async function cloudDelete(table, id) {
+  try {
+    const { error } = await sbClient.from(table).delete().eq("id", id);
+    if (error) console.warn(`cloudDelete(${table}) failed`, error);
+  } catch (e) {
+    console.warn(`cloudDelete(${table}) failed`, e);
+  }
+}
 
-    const { data: signUpData, error: signUpError } = await sbClient.auth.signUp({ email, password });
-    if (signUpError) {
-      const alreadyRegistered = /already registered|already exists/i.test(signUpError.message || "");
-      if (alreadyRegistered) {
-        const { data: signInData, error: signInError } = await sbClient.auth.signInWithPassword({ email, password });
-        if (signInError) { console.warn("Supabase sign-in failed", signInError); return; }
-        user = signInData.user;
-      } else {
-        console.warn("Supabase sign-up failed", signUpError);
-        return;
-      }
-    } else {
-      user = signUpData.user;
-    }
+// Ensures a Supabase auth user exists for (email,password) — signs up, or
+// signs in if that email is already registered. Returns the user or null.
+async function ensureAuthUser(email, password) {
+  const { data: signUpData, error: signUpError } = await sbClient.auth.signUp({ email, password });
+  if (!signUpError) return signUpData.user;
 
-    if (!user) {
-      // Email confirmation is likely required before a session exists yet.
-      console.warn("No active Supabase session yet (email confirmation may be pending).");
-      return;
-    }
+  const alreadyRegistered = /already registered|already exists/i.test(signUpError.message || "");
+  if (!alreadyRegistered) {
+    console.warn("Supabase sign-up failed", signUpError);
+    return null;
+  }
+  const { data: signInData, error: signInError } = await sbClient.auth.signInWithPassword({ email, password });
+  if (signInError) { console.warn("Supabase sign-in failed", signInError); return null; }
+  return signInData.user;
+}
 
-    // Does this user already belong to a household?
+// Creates a brand-new household for this user and links them to it as its
+// first member, using their actual picked onboarding role (not a hardcoded one).
+async function signUpAndCreateHousehold(name, email, password, role) {
+  try {
+    const user = await ensureAuthUser(email, password);
+    if (!user) return;
+
+    // Does this user already belong to a household? (repeat signup attempt)
     const { data: existingMember } = await sbClient
       .from("household_members")
       .select("household_id")
@@ -544,29 +594,84 @@ async function setupSupabaseAccount(name, email, password) {
       .maybeSingle();
 
     if (existingMember) {
-      save("ss:household_id", existingMember.household_id);
+      state.householdId = existingMember.household_id;
       return;
     }
 
-    // First time signing in — create their household.
-    const { data: household, error: householdError } = await sbClient
-      .from("households")
-      .insert({ name: (name || "My") + "'s Household" })
-      .select()
-      .single();
+    // Creates the household and this user's membership row atomically via
+    // an RPC (create_household_with_owner) rather than two separate client
+    // inserts — doing it client-side hit an RLS chicken-and-egg problem: you
+    // can't read back a household you just created until a household_members
+    // row makes you a member of it, but that row doesn't exist yet either.
+    const { data: rpcData, error: householdError } = await sbClient
+      .rpc("create_household_with_owner", { p_name: (name || "My") + "'s Household", p_role: role || "parent" });
 
     if (householdError) { console.warn("Household creation failed", householdError); return; }
+    const householdId = Array.isArray(rpcData) ? rpcData[0]?.household_id : rpcData?.household_id;
+    if (!householdId) { console.warn("Household creation returned no id", rpcData); return; }
 
-    const { error: memberError } = await sbClient
-      .from("household_members")
-      .insert({ household_id: household.id, user_id: user.id, role: "parent" });
+    // Seed the default family members/pets so a fresh cloud-synced household
+    // isn't empty on next load (mirrors the local DEFAULT_PEOPLE/DEFAULT_PETS
+    // that localStorage-only installs used to fall back to). Safe to do as a
+    // normal insert now — the membership row above already exists, so
+    // is_household_member() finds it and the read-back succeeds.
+    const seedRows = [
+      ...DEFAULT_PEOPLE.map(n => ({ household_id: householdId, name: n, kind: "person", color: BASE_COLORS[n] || null })),
+      ...DEFAULT_PETS.map(n => ({ household_id: householdId, name: n, kind: "pet", color: BASE_COLORS[n] || null }))
+    ];
+    const { data: seeded, error: seedError } = await sbClient.from("family_members").insert(seedRows).select();
+    if (seedError) console.warn("Family member seeding failed", seedError);
+    else if (seeded) state.familyMembers = seeded;
 
-    if (memberError) { console.warn("Household member link failed", memberError); return; }
-
-    save("ss:household_id", household.id);
+    state.householdId = householdId;
   } catch (e) {
     console.warn("Supabase account setup failed", e);
   }
+}
+
+// Joins an EXISTING household via an invite code instead of creating a new one.
+async function redeemInviteAndJoin(name, email, password, code) {
+  try {
+    const user = await ensureAuthUser(email, password);
+    if (!user) return null;
+
+    const { data: householdId, error } = await sbClient.rpc("redeem_household_invite", { p_code: code });
+    if (error) { console.warn("Invite redemption failed", error); return null; }
+
+    if (householdId) state.householdId = householdId;
+    return householdId || null;
+  } catch (e) {
+    console.warn("Invite redemption failed", e);
+    return null;
+  }
+}
+
+function generateInviteCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no O/0/I/1 to avoid ambiguity when read aloud
+  let code = "";
+  for (let i=0;i<7;i++) code += chars[Math.floor(Math.random()*chars.length)];
+  return code;
+}
+
+// Creates a new household_invites row (allowed by RLS since the creator is
+// already a member) and shows the code for the user to share.
+async function generateHouseholdInvite() {
+  if (!state.householdId) { showToast("No household yet — try again in a moment.","error"); return; }
+  setState({inviteGenerating:true});
+  const { data: { session } } = await sbClient.auth.getSession();
+  const { data, error } = await sbClient.from("household_invites").insert({
+    household_id: state.householdId,
+    code: generateInviteCode(),
+    created_by: session?.user?.id,
+    role: "caregiver"
+  }).select().single();
+  if (error) {
+    console.warn("Invite creation failed", error);
+    showToast("Couldn't create an invite code — try again.","error");
+    setState({inviteGenerating:false});
+    return;
+  }
+  setState({inviteGenerating:false, inviteCode: data.code});
 }
 
 const BETA_CODE = "appleaday26";
@@ -602,10 +707,12 @@ async function submitBetaInfo() {
   const nameEl = document.getElementById("bg-name");
   const emailEl = document.getElementById("bg-email");
   const passwordEl = document.getElementById("bg-password");
+  const inviteEl = document.getElementById("bg-invite-code");
   const errorEl = document.getElementById("bg-info-error");
   const name = (nameEl.value || "").trim();
   const email = (emailEl.value || "").trim();
   const password = (passwordEl.value || "").trim();
+  const inviteCode = (inviteEl.value || "").trim();
 
   if (!name) { errorEl.textContent = "Please enter your name."; nameEl.focus(); return; }
   if (!email || !email.includes("@") || !email.includes(".")) {
@@ -617,7 +724,7 @@ async function submitBetaInfo() {
   errorEl.textContent = "";
 
   // Stash for role step to read
-  window._betaPending = { name: name, email: email, password: password };
+  window._betaPending = { name: name, email: email, password: password, inviteCode: inviteCode };
 
   // Advance to role step
   document.getElementById("bg-step-info").style.display = "none";
@@ -632,6 +739,16 @@ function selectBetaRole(roleValue, btnEl) {
   const submitBtn = document.getElementById("bg-role-btn");
   if (submitBtn) submitBtn.disabled = false;
 }
+
+// Maps the onboarding role picker's values to the household_members.role
+// enum enforced by the household_members_role_check constraint.
+const ROLE_DB_MAP = {
+  primary_parent: "parent",
+  caring_for_parent: "caregiver",
+  my_own_meds: "self",
+  pet_meds: "pet_owner",
+  just_curious: "viewer"
+};
 
 async function submitBetaRole() {
   const errorEl = document.getElementById("bg-role-error");
@@ -671,9 +788,20 @@ async function submitBetaRole() {
     console.warn("Formspree submit failed", e);
   }
 
-  // Create (or sign in to) their Supabase account and household.
-  // This runs in the background — if it fails, the app still works locally.
-  await setupSupabaseAccount(pending.name, pending.email, pending.password);
+  // Either join an existing household via invite code, or create a new one —
+  // both run in the background; if either fails, the app still works locally.
+  const dbRole = ROLE_DB_MAP[_selectedRole] || "viewer";
+  if (pending.inviteCode) {
+    const joinedHouseholdId = await redeemInviteAndJoin(pending.name, pending.email, pending.password, pending.inviteCode);
+    if (!joinedHouseholdId) {
+      errorEl.textContent = "That invite code didn't work — check it with whoever sent it, or leave it blank to start your own household.";
+      btn.disabled = false;
+      btn.textContent = "Get Started";
+      return;
+    }
+  } else {
+    await signUpAndCreateHousehold(pending.name, pending.email, pending.password, dbRole);
+  }
 
   try {
     localStorage.setItem("ss:beta", JSON.stringify({
@@ -687,25 +815,72 @@ async function submitBetaRole() {
   setTimeout(realInit, 250);
 }
 
+// Returning-user sign-in — bypasses the whole beta-code/name/role ceremony.
+async function signInExisting() {
+  const emailEl = document.getElementById("bg-signin-email");
+  const passwordEl = document.getElementById("bg-signin-password");
+  const errorEl = document.getElementById("bg-signin-error");
+  const btn = document.getElementById("bg-signin-btn");
+  const email = (emailEl.value || "").trim();
+  const password = (passwordEl.value || "").trim();
+
+  if (!email || !password) {
+    errorEl.textContent = "Enter your email and password.";
+    return;
+  }
+  errorEl.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "Signing in...";
+
+  const { error } = await sbClient.auth.signInWithPassword({ email, password });
+
+  btn.disabled = false;
+  btn.textContent = "Sign In";
+
+  if (error) {
+    errorEl.textContent = "Couldn't sign in — check your email and password.";
+    return;
+  }
+
+  document.getElementById("beta-gate").classList.remove("show");
+  document.getElementById("beta-gate").style.display = "none";
+  document.getElementById("loading").style.display = "flex";
+  setTimeout(realInit, 250);
+}
+
 // ── INIT ─────────────────────────────────────────────────────────────────────
-function init() {
-  // Beta gate check — if already signed in, skip straight to app
-  let beta = null;
-  try { beta = JSON.parse(localStorage.getItem("ss:beta") || "null"); } catch(e) {}
-  if (beta && beta.email) {
+async function init() {
+  // Gate on a real Supabase session rather than the local "ss:beta" flag, so
+  // a second device signed into the same account skips straight to the app.
+  let session = null;
+  try {
+    const { data } = await sbClient.auth.getSession();
+    session = data.session;
+  } catch (e) { console.warn("Supabase getSession failed", e); }
+
+  if (session) {
     realInit();
   } else {
-    showBetaGate();
+    // Fall back to the legacy local-only flag, in case a prior local session
+    // exists but the Supabase session itself hasn't rehydrated yet.
+    let beta = null;
+    try { beta = JSON.parse(localStorage.getItem("ss:beta") || "null"); } catch(e) {}
+    if (beta && beta.email) { realInit(); } else { showBetaGate(); }
   }
 }
 
 function realInit() {
   state.meds = load("ss:meds", SAMPLE_MEDS);
+  state.doseEventsByMedId = load("ss:doseEvents", {});
   // Migrate any meds missing the new schedule fields
   const today = todayStr();
   state.meds = state.meds.map(m => {
     const times = (m.times && m.times.length) ? m.times : (m.time ? [m.time] : ["08:00"]);
-    let doseLog = m.doseLog || [];
+    // Legacy nested doseLog (pre-flat-map) — fold it into doseEventsByMedId once.
+    if (m.doseLog && m.doseLog.length && !state.doseEventsByMedId[m.id]) {
+      state.doseEventsByMedId[m.id] = m.doseLog;
+    }
+    let doseLog = state.doseEventsByMedId[m.id] || [];
     // If legacy "taken" flag is set but no log entry exists, backfill so we don't re-remind
     if (m.taken && times.length) {
       const firstKey = doseKey(m.id, today, times[0]);
@@ -713,14 +888,16 @@ function realInit() {
         doseLog.push({ key: firstKey, status: "taken", timestamp: Date.now() });
       }
     }
+    state.doseEventsByMedId[m.id] = doseLog;
+    const { doseLog: _drop, ...rest } = m;
     return {
-      ...m,
+      ...rest,
       times,
-      doseLog,
       withFood: m.withFood || false
     };
   });
   save("ss:meds", state.meds);
+  save("ss:doseEvents", state.doseEventsByMedId);
   state.people = load("ss:people", DEFAULT_PEOPLE);
   state.pets = load("ss:pets", DEFAULT_PETS);
   state.colorMap = load("ss:colors", BASE_COLORS);
@@ -733,6 +910,238 @@ function realInit() {
   render();
   startReminderEngine();
   processNotificationUrlParams();
+
+  // Instant paint above is from localStorage; now reconcile with Supabase in
+  // the background (source of truth) and subscribe to live updates. Any
+  // failure here (offline, outage) just leaves the app on local-only data.
+  loadHouseholdDataFromSupabase().catch(e => console.warn("Cloud sync failed, using local data only", e));
+}
+
+// Resolves the signed-in user's household, pulls every household-scoped
+// table, reshapes it into the exact `state` shapes the rest of the app
+// already expects, and re-renders. Safe to call with no household yet
+// (e.g. a session exists but signup's household-creation step hasn't
+// finished) — it just no-ops.
+async function loadHouseholdDataFromSupabase() {
+  const { data: { session } } = await sbClient.auth.getSession();
+  if (!session) return;
+
+  if (!state.householdId) {
+    const { data: membership, error: memErr } = await sbClient
+      .from("household_members")
+      .select("household_id")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+    if (memErr || !membership) { console.warn("No household found for signed-in user yet", memErr); return; }
+    state.householdId = membership.household_id;
+  }
+
+  const hid = state.householdId;
+  const [fmRes, medRes, doseRes, emergRes, docRes] = await Promise.all([
+    sbClient.from("family_members").select("*").eq("household_id", hid),
+    sbClient.from("medications").select("*").eq("household_id", hid),
+    sbClient.from("dose_events").select("*").eq("household_id", hid),
+    sbClient.from("emergency_profiles").select("*").eq("household_id", hid),
+    sbClient.from("documents").select("*").eq("household_id", hid)
+  ]);
+
+  if (fmRes.data) {
+    state.familyMembers = fmRes.data;
+    state.people = fmRes.data.filter(f => f.kind === "person").map(f => f.name);
+    state.pets = fmRes.data.filter(f => f.kind === "pet").map(f => f.name);
+    const colorMap = { ...state.colorMap };
+    fmRes.data.forEach(f => { if (f.color) colorMap[f.name] = f.color; });
+    state.colorMap = colorMap;
+    save("ss:people", state.people);
+    save("ss:pets", state.pets);
+    save("ss:colors", state.colorMap);
+  }
+
+  if (medRes.data) {
+    state.meds = medRes.data.map(rowToMed);
+    save("ss:meds", state.meds);
+  }
+
+  if (doseRes.data) {
+    const byMed = {};
+    doseRes.data.forEach(ev => { (byMed[ev.medication_id] = byMed[ev.medication_id] || []).push(rowToDoseEvent(ev)); });
+    state.doseEventsByMedId = byMed;
+    // Back-compat: keep the legacy `taken` flag in sync with today's dose
+    // events so existing dashboard/report code (which still reads med.taken)
+    // keeps working without a rewrite (see plan's "explicitly out of scope").
+    const todayKeyPrefix = (medId) => medId + "|" + today;
+    state.meds.forEach(m => {
+      const log = byMed[m.id] || [];
+      m.taken = log.some(l => l.key.startsWith(todayKeyPrefix(m.id)) && l.status === "taken");
+    });
+    save("ss:meds", state.meds);
+    save("ss:doseEvents", state.doseEventsByMedId);
+  }
+
+  if (emergRes.data) {
+    const profiles = {};
+    emergRes.data.forEach(row => { profiles[row.person] = rowToEmergencyProfile(row); });
+    state.emergencyProfiles = profiles;
+    save("ss:emergency", state.emergencyProfiles);
+  }
+
+  if (docRes.data) {
+    state.docs = docRes.data.map(rowToDoc);
+    save("ss:docs", state.docs);
+  }
+
+  render();
+  subscribeToHouseholdRealtime(hid);
+}
+
+// ── ROW <-> STATE SHAPE MAPPERS ──────────────────────────────────────────────
+// Keep Supabase's snake_case columns from leaking into the rest of the app,
+// which already expects these exact camelCase shapes from localStorage.
+function rowToMed(row) {
+  return {
+    id: row.id,
+    person: row.person,
+    name: row.name,
+    dose: row.dose,
+    frequency: row.frequency,
+    times: (row.times && row.times.length) ? row.times : ["08:00"],
+    time: (row.times && row.times[0]) || "08:00", // backwards compat, mirrors existing client field
+    withFood: row.with_food,
+    notes: row.notes,
+    pharmacy: row.pharmacy,
+    nextDue: row.next_due,
+    taken: false // recomputed from dose_events right after this mapping runs
+  };
+}
+function rowToDoseEvent(ev) {
+  return {
+    id: ev.id,
+    key: doseKey(ev.medication_id, ev.dose_date, ev.dose_time),
+    status: ev.status,
+    timestamp: new Date(ev.occurred_at).getTime(),
+    ...(ev.snoozed_until ? { snoozedUntil: new Date(ev.snoozed_until).getTime() } : {})
+  };
+}
+function rowToEmergencyProfile(row) {
+  return {
+    blood: row.blood, dob: row.dob, weight: row.weight,
+    doctor: row.doctor, doctorPhone: row.doctor_phone,
+    emergency: row.emergency_contact, emergencyPhone: row.emergency_phone,
+    allergies: row.allergies, conditions: row.conditions
+  };
+}
+function rowToDoc(row) {
+  return {
+    id: row.id, person: row.person, fileName: row.file_name, fileSize: row.file_size,
+    uploadDate: row.upload_date, title: row.title, type: row.type, date: row.doc_date,
+    summary: row.summary, keyValues: row.key_values || [], diagnoses: row.diagnoses || [],
+    medications: row.medications || [], followUp: row.follow_up
+  };
+}
+
+// ── REALTIME ─────────────────────────────────────────────────────────────────
+// One channel per household. Every handler is an idempotent upsert-or-remove
+// into the local `state` collection by id, so a device's own optimistic
+// write echoing back through Realtime is harmless — it just re-writes
+// identical data. Renders are debounced via requestAnimationFrame since the
+// initial .subscribe() catch-up can fire a burst of events at once.
+let renderScheduled = false;
+function scheduleRender() {
+  if (renderScheduled) return;
+  renderScheduled = true;
+  requestAnimationFrame(() => { renderScheduled = false; if (state.loaded) render(); });
+}
+
+function subscribeToHouseholdRealtime(householdId) {
+  if (householdChannel) { sbClient.removeChannel(householdChannel); householdChannel = null; }
+  householdChannel = sbClient.channel(`household-${householdId}`)
+    .on("postgres_changes", {event:"*", schema:"public", table:"medications", filter:`household_id=eq.${householdId}`}, handleMedicationChange)
+    .on("postgres_changes", {event:"*", schema:"public", table:"dose_events", filter:`household_id=eq.${householdId}`}, handleDoseEventChange)
+    .on("postgres_changes", {event:"*", schema:"public", table:"family_members", filter:`household_id=eq.${householdId}`}, handleFamilyMemberChange)
+    .on("postgres_changes", {event:"*", schema:"public", table:"emergency_profiles", filter:`household_id=eq.${householdId}`}, handleEmergencyChange)
+    .on("postgres_changes", {event:"*", schema:"public", table:"documents", filter:`household_id=eq.${householdId}`}, handleDocumentChange)
+    .subscribe();
+}
+
+function handleMedicationChange(payload) {
+  if (payload.eventType === "DELETE") {
+    const id = payload.old.id;
+    state.meds = state.meds.filter(m => m.id !== id);
+    delete state.doseEventsByMedId[id];
+    save("ss:doseEvents", state.doseEventsByMedId);
+  } else {
+    const incoming = rowToMed(payload.new);
+    const existing = state.meds.find(m => m.id === incoming.id);
+    if (existing) incoming.taken = existing.taken; // preserve locally-computed back-compat flag
+    state.meds = existing ? state.meds.map(m => m.id === incoming.id ? incoming : m) : [...state.meds, incoming];
+  }
+  save("ss:meds", state.meds);
+  scheduleRender();
+}
+
+function handleDoseEventChange(payload) {
+  const row = payload.eventType === "DELETE" ? payload.old : payload.new;
+  const medId = row.medication_id;
+  const log = state.doseEventsByMedId[medId] || [];
+  const key = doseKey(medId, row.dose_date, row.dose_time);
+  const filtered = log.filter(l => l.key !== key);
+  state.doseEventsByMedId[medId] = payload.eventType === "DELETE" ? filtered : [...filtered, rowToDoseEvent(payload.new)];
+  save("ss:doseEvents", state.doseEventsByMedId);
+
+  // Keep the legacy `taken` flag in sync for today's doses (see realInit()).
+  const med = state.meds.find(m => m.id === medId);
+  if (med) {
+    const today = todayStr();
+    med.taken = (state.doseEventsByMedId[medId] || []).some(l => l.key.startsWith(medId + "|" + today) && l.status === "taken");
+    save("ss:meds", state.meds);
+  }
+  scheduleRender();
+}
+
+function handleFamilyMemberChange(payload) {
+  if (payload.eventType === "DELETE") {
+    const id = payload.old.id;
+    const removed = state.familyMembers.find(f => f.id === id);
+    state.familyMembers = state.familyMembers.filter(f => f.id !== id);
+    if (removed) {
+      state.people = state.people.filter(p => p !== removed.name);
+      state.pets = state.pets.filter(p => p !== removed.name);
+      if (state.selectedPerson === removed.name) state.selectedPerson = "All";
+    }
+  } else {
+    const row = payload.new;
+    const existing = state.familyMembers.find(f => f.id === row.id);
+    state.familyMembers = existing ? state.familyMembers.map(f => f.id === row.id ? row : f) : [...state.familyMembers, row];
+    const targetList = row.kind === "pet" ? "pets" : "people";
+    if (!state[targetList].includes(row.name)) state[targetList] = [...state[targetList], row.name];
+    if (row.color) state.colorMap = { ...state.colorMap, [row.name]: row.color };
+  }
+  save("ss:people", state.people);
+  save("ss:pets", state.pets);
+  save("ss:colors", state.colorMap);
+  scheduleRender();
+}
+
+function handleEmergencyChange(payload) {
+  if (payload.eventType === "DELETE") {
+    delete state.emergencyProfiles[payload.old.person];
+  } else {
+    state.emergencyProfiles = { ...state.emergencyProfiles, [payload.new.person]: rowToEmergencyProfile(payload.new) };
+  }
+  save("ss:emergency", state.emergencyProfiles);
+  scheduleRender();
+}
+
+function handleDocumentChange(payload) {
+  if (payload.eventType === "DELETE") {
+    state.docs = state.docs.filter(d => d.id !== payload.old.id);
+  } else {
+    const incoming = rowToDoc(payload.new);
+    const existing = state.docs.find(d => d.id === incoming.id);
+    state.docs = existing ? state.docs.map(d => d.id === incoming.id ? incoming : d) : [incoming, ...state.docs];
+  }
+  save("ss:docs", state.docs);
+  scheduleRender();
 }
 
 // ── BETA FEEDBACK ────────────────────────────────────────────────────────────
@@ -817,7 +1226,7 @@ function takeMed(id) {
     let closestDelta = Infinity;
     for (const t of times) {
       const key = doseKey(id, today, t);
-      const existing = (med.doseLog || []).find(l => l.key === key);
+      const existing = getDoseLog(med).find(l => l.key === key);
       if (existing && existing.status === "taken") continue;
       const delta = Math.abs(timeToMinutes(t) - nowMin);
       if (delta < closestDelta) {
@@ -838,6 +1247,7 @@ function deleteMed(id) {
   showToast("Medication removed","info");
   render();
   cancelMedPushes(id);
+  cloudDelete("medications", id);
 }
 function openAdd() {
   state.editMedId = null;
@@ -849,15 +1259,42 @@ function openEdit(med) {
   state.form = {person:med.person,name:med.name,dose:med.dose,frequency:med.frequency,time:med.time,notes:med.notes||"",pharmacy:med.pharmacy||""};
   setState({view:"add"});
 }
-function submitForm() {
+// Builds a medications-table row from the client's form shape. `id` is
+// omitted for new meds so Postgres mints a uuid (upsert JSON-stringifies the
+// row, which drops undefined keys).
+function medRowForCloud(form, id) {
+  const times = [form.time || "08:00"];
+  return {
+    ...(id ? { id } : {}),
+    household_id: state.householdId,
+    family_member_id: familyMemberIdForName(form.person),
+    person: form.person,
+    name: form.name,
+    dose: form.dose,
+    frequency: form.frequency,
+    times,
+    with_food: form.withFood || false,
+    notes: form.notes,
+    pharmacy: form.pharmacy,
+    next_due: "Today " + times[0]
+  };
+}
+
+async function submitForm() {
   if (!state.form.name||!state.form.dose) { showToast("Name and dose required","error"); return; }
   const isEdit = !!state.editMedId;
   let editedId = state.editMedId;
+
+  const draft = medRowForCloud(state.form, isEdit ? editedId : undefined);
+  const saved = await cloudUpsert("medications", draft);
+  // Offline/failure fallback: keep working locally with a client-generated id.
+  const fresh = saved ? rowToMed(saved) : { id: editedId || (Date.now()+""), ...state.form, times: draft.times, nextDue: draft.next_due, taken: false };
+
   if (isEdit) {
-    state.meds = state.meds.map(m=>m.id===state.editMedId?{...m,...state.form,times:[state.form.time||"08:00"]}:m);
+    state.meds = state.meds.map(m=>m.id===editedId?{...m,...fresh,taken:m.taken}:m);
     showToast("✓ Medication updated");
   } else {
-    state.meds.push({id:Date.now(),...state.form,times:[state.form.time||"08:00"],doseLog:[],nextDue:"Today "+state.form.time,taken:false});
+    state.meds.push(fresh);
     showToast("✓ Medication added");
   }
   save("ss:meds", state.meds);
@@ -874,7 +1311,7 @@ function submitForm() {
     setTimeout(() => setState({showPushPrompt: true}), 800);
   }
 }
-function addPerson() {
+async function addPerson() {
   const name = state.newPersonName.trim();
   if (!name) return;
   if (state.people.includes(name)||state.pets.includes(name)) { showToast("Name already exists","error"); return; }
@@ -885,17 +1322,26 @@ function addPerson() {
   save("ss:colors", state.colorMap);
   showToast("✓ "+name+" added");
   setState({showAddPerson:false, newPersonName:""});
+
+  const saved = await cloudUpsert("family_members", { household_id: state.householdId, name, kind: "person", color });
+  if (saved) state.familyMembers = [...state.familyMembers.filter(f=>f.name!==name), saved];
 }
 function removePerson(name) {
+  const fm = state.familyMembers.find(f=>f.name===name);
   state.people = state.people.filter(p=>p!==name);
   state.pets = state.pets.filter(p=>p!==name);
   state.meds = state.meds.filter(m=>m.person!==name);
+  state.familyMembers = state.familyMembers.filter(f=>f.name!==name);
   if (state.selectedPerson===name) state.selectedPerson="All";
   save("ss:people", state.people);
   save("ss:pets", state.pets);
   save("ss:meds", state.meds);
   showToast(name+" removed","info");
   render();
+  // Cascades medications/emergency_profiles/documents server-side via
+  // ON DELETE CASCADE; other devices pick up the cleanup via Realtime DELETE
+  // events (see plan's "orphaned data" note — resolved for free here).
+  if (fm) cloudDelete("family_members", fm.id);
 }
 function addFromScan() {
   if (!state.scanResult) return;
@@ -920,7 +1366,7 @@ function addFromScan() {
   setState({view:"confirmSchedule"});
 }
 
-function confirmScheduleSave() {
+async function confirmScheduleSave() {
   const c = state.scheduleConfirm;
   if (!c) return;
   // Read any user edits from the form
@@ -939,21 +1385,28 @@ function confirmScheduleSave() {
   }
   if (!c.name || !c.dose) { showToast("Name and dose required","error"); return; }
   if (!c.times.length && c.frequency !== "As needed") { showToast("Add at least one time","error"); return; }
-  state.meds.push({
-    id: Date.now(),
+
+  const draft = {
+    household_id: state.householdId,
+    family_member_id: familyMemberIdForName(c.person),
     person: c.person,
     name: c.name,
     dose: c.dose,
     frequency: c.frequency,
     times: c.times,
-    time: c.times[0] || "08:00", // backwards compat
-    withFood: c.withFood,
+    with_food: c.withFood,
     notes: c.notes,
     pharmacy: "",
-    doseLog: [],
-    nextDue: "Today " + (c.times[0] || "08:00"),
-    taken: false
-  });
+    next_due: "Today " + (c.times[0] || "08:00")
+  };
+  const saved = await cloudUpsert("medications", draft);
+  const fresh = saved ? rowToMed(saved) : {
+    id: Date.now()+"", person: c.person, name: c.name, dose: c.dose, frequency: c.frequency,
+    times: c.times, time: c.times[0] || "08:00", withFood: c.withFood, notes: c.notes,
+    pharmacy: "", nextDue: draft.next_due, taken: false
+  };
+
+  state.meds.push(fresh);
   save("ss:meds", state.meds);
   showToast("✓ Added with reminder schedule");
   setState({view:"meds", scanResult:null, scanImagePreview:null, scheduleConfirm:null});
@@ -1071,7 +1524,7 @@ function getTodayDoses() {
     const times = (m.times && m.times.length) ? m.times : (m.time ? [m.time] : []);
     times.forEach(t => {
       const key = doseKey(m.id, today, t);
-      const logEntry = (m.doseLog||[]).find(l => l.key === key);
+      const logEntry = getDoseLog(m).find(l => l.key === key);
       events.push({
         medId: m.id,
         medName: m.name,
@@ -1092,16 +1545,21 @@ function getTodayDoses() {
 function logDoseAction(medId, key, status, extra) {
   const med = state.meds.find(m => m.id === medId);
   if (!med) return;
-  if (!med.doseLog) med.doseLog = [];
   // Remove any existing entry for this key, then add the new one
-  med.doseLog = med.doseLog.filter(l => l.key !== key);
-  med.doseLog.push({
-    key,
+  const log = getDoseLog(med).filter(l => l.key !== key);
+  log.push({ key, status, timestamp: Date.now(), ...(extra || {}) });
+  state.doseEventsByMedId[medId] = log;
+  save("ss:doseEvents", state.doseEventsByMedId);
+
+  const [, dateStr, timeStr] = key.split("|");
+  cloudUpsert("dose_events", {
+    household_id: state.householdId,
+    medication_id: medId,
+    dose_date: dateStr,
+    dose_time: timeStr,
     status,
-    timestamp: Date.now(),
-    ...(extra || {})
-  });
-  save("ss:meds", state.meds);
+    snoozed_until: extra && extra.snoozedUntil ? new Date(extra.snoozedUntil).toISOString() : null
+  }, "medication_id,dose_date,dose_time");
 }
 
 // Mark a dose taken
@@ -1655,7 +2113,24 @@ Return ONLY valid JSON, no other text:
           ? {type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}}
           : {type:"image",source:{type:"base64",media_type:mt,data:base64}};
         const result = await callClaude([{role:"user",content:[cb,{type:"text",text:'Analyze this medical document. Return ONLY JSON: {"title":"","type":"Lab Results|Doctor Report|Prescription|Imaging|Discharge Summary|Other","date":null,"summary":"","keyValues":[{"label":"","value":"","flag":"normal|low|high"}],"diagnoses":[],"medications":[],"followUp":null}'}]}], 1500);
-        const doc = {id:Date.now(),person,fileName:file.name,fileSize:Math.round(file.size/1024)+"KB",uploadDate:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),...result};
+        const localDoc = {id:Date.now()+"",person,fileName:file.name,fileSize:Math.round(file.size/1024)+"KB",uploadDate:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),...result};
+        const saved = await cloudUpsert("documents", {
+          household_id: state.householdId,
+          family_member_id: familyMemberIdForName(person),
+          person,
+          file_name: localDoc.fileName,
+          file_size: localDoc.fileSize,
+          upload_date: localDoc.uploadDate,
+          title: result.title,
+          type: result.type,
+          doc_date: result.date,
+          summary: result.summary,
+          key_values: result.keyValues || [],
+          diagnoses: result.diagnoses || [],
+          medications: result.medications || [],
+          follow_up: result.followUp
+        });
+        const doc = saved ? rowToDoc(saved) : localDoc;
         state.docs.unshift(doc);
         save("ss:docs", state.docs);
         showToast("✓ Document analyzed and saved");
@@ -1674,7 +2149,9 @@ async function runPillIdentify(imageBlock, imprint) {
   const currentMeds = state.meds.map(m=>m.name).join(", ")||"none";
   const content = [];
   if (imageBlock) content.push(imageBlock);
-  content.push({type:"text",text:`${imageBlock?"You are a pill identification expert. Analyze this photo carefully and identify the medication — use shape, color, imprint, and markings even if partially visible.":"Identify pill with imprint code: "+imprint} Current patient meds for interaction check: ${currentMeds}. Return ONLY valid JSON with no extra text: {"name":"","brandName":null,"strength":"","shape":"","color":"","imprint":"","category":"","usedFor":"","howItWorks":"","commonSideEffects":[],"seriousWarnings":[],"interactions":[{"drug":"","severity":"mild|moderate|severe","description":""}],"notes":null,"confidence":"high|medium|low"}`});
+  const photoInstructions = `You are a pill identification expert. The imprint code (letters/numbers debossed or printed on the pill) is the single most reliable identifier — pharmaceutical references map each exact imprint to one specific drug and strength, and different strengths of the same drug often have different, similarly-shaped imprints (e.g. "M523" vs "M522"). Read every character of the imprint literally and carefully, one at a time, before considering general shape/color/size. Do NOT infer the strength from what a similar-looking pill "usually" is — only state a strength you can justify from the imprint characters you actually read clearly. If part of the imprint is blurry, cut off, or ambiguous, do not guess a specific number with high confidence — instead mark "confidence" as "medium" or "low" and say in "notes" which part of the imprint was unclear.`;
+  const imprintInstructions = `Identify the pill with imprint code: ${imprint}. Base the strength strictly on this exact imprint code — do not substitute a similar or more common code.`;
+  content.push({type:"text",text:`${imageBlock?photoInstructions:imprintInstructions} Current patient meds for interaction check: ${currentMeds}. Return ONLY valid JSON with no extra text: {"name":"","brandName":null,"strength":"","shape":"","color":"","imprint":"","category":"","usedFor":"","howItWorks":"","commonSideEffects":[],"seriousWarnings":[],"interactions":[{"drug":"","severity":"mild|moderate|severe","description":""}],"notes":null,"confidence":"high|medium|low"}`});
   try {
     const result = await callClaude([{role:"user",content}]);
     if (!result.name) {
@@ -2268,6 +2745,21 @@ function buildReport(filtered) {
   ${ep.allergies?`<div style="margin-top:10px;padding:8px 10px;background:#3a1a14;border-radius:8px;font-size:12px;color:#e8a090">⚠️ Allergies on file: ${ep.allergies}</div>`:""}
 </div>
 
+<div class="form-card" style="margin-top:16px">
+  <div style="font-weight:700;font-size:14px;margin-bottom:4px">👨‍👩‍👧 Family & Household</div>
+  <div style="font-size:12px;color:#a0896e;margin-bottom:12px">Everyone below shares the same live medication list, on any device.</div>
+  ${getAllPeople().map(p=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0"><span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px">${getInitials(p)}</span><span style="font-size:13px">${p}</span></div>`).join("")}
+  ${state.inviteCode?`
+    <div style="margin-top:12px;padding:12px;background:#1e1610;border-radius:10px;border:1px solid rgba(201,166,107,0.25);text-align:center">
+      <div style="font-size:11px;color:#a0896e;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Share this code</div>
+      <div style="font-size:22px;font-weight:700;letter-spacing:.15em;color:#f0e6d8;font-family:Georgia,serif">${state.inviteCode}</div>
+      <div style="font-size:11px;color:#a0896e;margin-top:8px">They enter this during sign-up to join your household instantly.</div>
+    </div>
+  `:`
+    <button data-action="generateInvite" style="margin-top:8px;background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">${state.inviteGenerating?"Generating...":"+ Invite a Family Member"}</button>
+  `}
+</div>
+
 <div style="margin-top:20px;padding:16px;background:#1a1208;border-radius:14px;border:1px solid #3a2e24;text-align:center">
   <div style="font-size:12px;color:#5a4a43;margin-bottom:10px;letter-spacing:.05em;text-transform:uppercase">App Settings</div>
   <button data-action="resetApp" style="background:#3a1a14;color:#e8a090;border:1px solid #7a2a20;border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">🗑️ Reset App — Clear All Data & Start Fresh</button>
@@ -2387,6 +2879,7 @@ function handleAction(e) {
     case "showAddPerson": setState({showAddPerson:true}); break;
     case "addPerson": addPerson(); break;
     case "cancelAddPerson": setState({showAddPerson:false,newPersonName:""}); break;
+    case "generateInvite": generateHouseholdInvite(); break;
     case "resetApp": {
       if (confirm("Reset all app data? This clears all medications, family members and settings.")) {
         ["ss:meds","ss:people","ss:pets","ss:colors","ss:emergency","ss:docs","ss-td"].forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});
@@ -2396,9 +2889,9 @@ function handleAction(e) {
       break;
     }
     case "openAdd": openAdd(); break;
-    case "takeMed": takeMed(parseInt(el.dataset.id)); break;
-    case "editMed": openEdit(state.meds.find(m=>m.id===parseInt(el.dataset.id))); break;
-    case "deleteMed": deleteMed(parseInt(el.dataset.id)); break;
+    case "takeMed": takeMed(el.dataset.id); break;
+    case "editMed": openEdit(state.meds.find(m=>m.id===el.dataset.id)); break;
+    case "deleteMed": deleteMed(el.dataset.id); break;
     case "submitForm": readFormAndSubmit(); break;
     case "addFromScan": addFromScan(); break;
     case "clearScan": setState({scanResult:null,scanImagePreview:null,scanError:null}); break;
@@ -2425,11 +2918,13 @@ function handleAction(e) {
       break;
     }
     case "setDocsPerson": setState({docsPerson:el.dataset.person,docViewing:null}); break;
-    case "viewDoc": setState({docViewing:state.docs.find(d=>d.id===parseInt(el.dataset.id))}); break;
+    case "viewDoc": setState({docViewing:state.docs.find(d=>d.id===el.dataset.id)}); break;
     case "clearDocViewing": setState({docViewing:null}); break;
     case "deleteDoc": {
-      state.docs=state.docs.filter(d=>d.id!==parseInt(el.dataset.id));
+      const removedDocId = el.dataset.id;
+      state.docs=state.docs.filter(d=>d.id!==removedDocId);
       save("ss:docs",state.docs);
+      cloudDelete("documents", removedDocId);
       showToast("Document removed","info");
       setState({docViewing:null});
       break;
@@ -2469,6 +2964,17 @@ function saveEmergency() {
   save("ss:emergency", state.emergencyProfiles);
   showToast("✓ Emergency info saved");
   setState({editingEmergency:false});
+
+  const ef = state.emergencyForm;
+  cloudUpsert("emergency_profiles", {
+    household_id: state.householdId,
+    family_member_id: familyMemberIdForName(p),
+    person: p,
+    blood: ef.blood, dob: ef.dob, weight: ef.weight,
+    doctor: ef.doctor, doctor_phone: ef.doctorPhone,
+    emergency_contact: ef.emergency, emergency_phone: ef.emergencyPhone,
+    allergies: ef.allergies, conditions: ef.conditions
+  }, "household_id,person");
 }
 
 function identifyByImprint() {
@@ -2491,6 +2997,18 @@ window.addEventListener("load", function() {
   if (codeBtn) codeBtn.addEventListener("click", checkBetaCode);
   if (codeInput) codeInput.addEventListener("keydown", e => { if(e.key==="Enter") checkBetaCode(); });
   if (infoBtn) infoBtn.addEventListener("click", submitBetaInfo);
+
+  // Wire returning-user sign-in toggle + button
+  const signinToggle = document.getElementById("bg-signin-toggle");
+  const signinPanel = document.getElementById("bg-signin-panel");
+  const signinBtn = document.getElementById("bg-signin-btn");
+  const signinPassword = document.getElementById("bg-signin-password");
+  if (signinToggle) signinToggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    signinPanel.style.display = signinPanel.style.display === "none" ? "block" : "none";
+  });
+  if (signinBtn) signinBtn.addEventListener("click", signInExisting);
+  if (signinPassword) signinPassword.addEventListener("keydown", e => { if(e.key==="Enter") signInExisting(); });
   if (nameInput) nameInput.addEventListener("keydown", e => { if(e.key==="Enter") emailInput.focus(); });
   if (emailInput) emailInput.addEventListener("keydown", e => { if(e.key==="Enter") submitBetaInfo(); });
 
