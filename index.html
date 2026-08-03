@@ -990,6 +990,19 @@ async function loadHouseholdDataFromSupabase() {
     save("ss:docs", state.docs);
   }
 
+  // An established household (has real medications, docs, emergency info, or
+  // more family members than the 3 seeded defaults) is clearly not a
+  // brand-new account — suppress the "Welcome, get started in 5 steps"
+  // tutorial on this device even though its local ss-td flag was never set.
+  // Without this, signing into any new device re-shows the full onboarding
+  // tutorial to an already-experienced user, since ss-td previously only
+  // ever lived in localStorage and had no cloud counterpart.
+  const isEstablishedHousehold = state.meds.length > 0 || state.docs.length > 0 ||
+    Object.keys(state.emergencyProfiles).length > 0 || state.familyMembers.length > 3;
+  if (isEstablishedHousehold) {
+    try { localStorage.setItem("ss-td", "1"); } catch (e) {}
+  }
+
   render();
   subscribeToHouseholdRealtime(hid);
 }
@@ -3146,7 +3159,18 @@ if ('serviceWorker' in navigator) {
 <script>
 window.addEventListener('load',function(){
   setTimeout(function(){
-    try{if(!localStorage.getItem('ss-td'))document.getElementById('tut').classList.add('show');}catch(e){}
+    try{
+      // `state` is the shared app object from the main script — check it
+      // directly too, not just the ss-td flag, in case the cloud data fetch
+      // (which also sets ss-td once it detects an established household)
+      // hasn't resolved yet by the time this fires.
+      var looksEstablished = typeof state!=='undefined' && state && (
+        (state.meds && state.meds.length>0) ||
+        (state.docs && state.docs.length>0) ||
+        (state.familyMembers && state.familyMembers.length>3)
+      );
+      if(!localStorage.getItem('ss-td') && !looksEstablished) document.getElementById('tut').classList.add('show');
+    }catch(e){}
   },1800);
 });
 function openTutorial(){document.getElementById('tut').classList.add('show');}
