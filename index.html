@@ -321,6 +321,22 @@ textarea.form-input{min-height:72px;resize:vertical}
 .reminder-btn-skip{background:transparent;color:#8a7a70;font-size:13px;padding:10px}
 @keyframes reminderFadeIn{from{opacity:0}to{opacity:1}}
 @keyframes reminderPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.15);opacity:.8}}
+@media print {
+  /* Isolate #printable-report (the Report tab's stats/medication-breakdown/
+     Notes-for-Provider content) — hides everything else on the page,
+     including the bottom nav, header, and the rest of the Report tab
+     (Family & Household, App Settings, Privacy & Security) which aren't
+     part of what a provider would want printed. */
+  body * { visibility: hidden; }
+  #printable-report, #printable-report * { visibility: visible; }
+  #printable-report { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; background: #fff; }
+  /* Most colors in this app are inline styles sized for a dark background
+     (cream/gold text, dark card fills) — force plain black-on-white instead
+     of letting light-colored text print near-invisibly on paper. !important
+     is required to win over those inline styles. */
+  #printable-report * { color: #000 !important; background: none !important; border-color: #ccc !important; }
+  .no-print { display: none !important; }
+}
 </style>
 </head>
 <body>
@@ -510,7 +526,8 @@ function load(key, fallback) {
 function getColor(p) { return state.colorMap[p] || "#8c7b74"; }
 function getInitials(n) { return n.split(" ").map(x=>x[0]).join("").toUpperCase(); }
 function getFiltered() {
-  return state.selectedPerson === "All" ? state.meds : state.meds.filter(m=>m.person===state.selectedPerson);
+  const base = state.meds.filter(m=>!isArchived(m));
+  return state.selectedPerson === "All" ? base : base.filter(m=>m.person===state.selectedPerson);
 }
 function getAllPeople() { return [...state.people, ...state.pets]; }
 function showToast(msg, type="success") {
@@ -624,6 +641,13 @@ function courseEndDate(med) {
 function isPastCourse(med) {
   const end = courseEndDate(med);
   return end ? new Date(todayStr() + "T00:00:00") >= end : false;
+}
+// A "removed" medication is archived, not deleted — see deleteMed and
+// 0012_archive_instead_of_delete_medications.sql. Its dose_events rows stay
+// in the database untouched; this just hides it from active/past views the
+// same way isPastCourse already hides a finished course.
+function isArchived(med) {
+  return !!med.archivedAt;
 }
 
 // Single source of truth for "was this med taken today" — derived live from
@@ -1116,7 +1140,8 @@ function rowToMed(row) {
     nextDue: row.next_due,
     startDate: row.start_date || todayStr(),
     durationDays: row.duration_days ?? null,
-    refillsRemaining: row.refills_remaining ?? null
+    refillsRemaining: row.refills_remaining ?? null,
+    archivedAt: row.archived_at ?? null
   };
 }
 function rowToDoseEvent(ev) {
@@ -1370,13 +1395,23 @@ function takeMed(id) {
   }
   showToast("✓ Medication marked as taken");
 }
-function deleteMed(id) {
+// Archives rather than hard-deletes — a real delete cascades away the
+// medication's dose_events (its entire taken/skipped/snoozed history) via
+// the FK in 0001, silently destroying the exact audit trail dose_events was
+// built to preserve. Archiving hides it from every active/past view (see
+// isArchived, used everywhere isPastCourse is) while leaving its history
+// queryable in the database.
+async function deleteMed(id) {
+  const med = state.meds.find(m=>String(m.id)===String(id));
   state.meds = state.meds.filter(m=>String(m.id)!==String(id));
   save("ss:meds", state.meds);
   showToast("Medication removed","info");
   render();
   cancelMedPushes(id);
-  cloudDelete("medications", id);
+  if (!med) return;
+  const draft = medRowForCloud(med, id);
+  draft.archived_at = new Date().toISOString();
+  await cloudUpsert("medications", draft);
 }
 function openAdd() {
   state.editMedId = null;
@@ -1777,7 +1812,7 @@ function getTodayDoses() {
   const events = [];
   state.meds.forEach(m => {
     if (m.frequency === "As needed") return;
-    if (isPastCourse(m)) return;
+    if (isPastCourse(m) || isArchived(m)) return;
     const times = (m.times && m.times.length) ? m.times : (m.time ? [m.time] : []);
     times.forEach(t => {
       const key = doseKey(m.id, today, t);
@@ -2053,7 +2088,7 @@ async function scheduleRemoteCaregiverPush(targetUserId, personMeds) {
   const subscriptionId = member && member.onesignal_subscription_id;
   if (!subscriptionId) return; // no known device for them yet — their own next-load resync will cover it once they've enabled push
   const scheduleableMeds = personMeds
-    .filter(m => m.frequency !== "As needed" && m.times && m.times.length > 0 && !isPastCourse(m))
+    .filter(m => m.frequency !== "As needed" && m.times && m.times.length > 0 && !isPastCourse(m) && !isArchived(m))
     .map(toPushPayload);
   if (scheduleableMeds.length === 0) return;
   try {
@@ -2086,7 +2121,7 @@ async function syncPushSchedule() {
       const fm = state.familyMembers.find(f => f.name === m.person);
       return fm && fm.caregiver_user_id === state.currentUserId;
     })
-    .filter(m => m.frequency !== "As needed" && m.times && m.times.length > 0 && !isPastCourse(m))
+    .filter(m => m.frequency !== "As needed" && m.times && m.times.length > 0 && !isPastCourse(m) && !isArchived(m))
     .map(toPushPayload);
 
   if (scheduleableMeds.length === 0) return;
@@ -2457,7 +2492,10 @@ Return ONLY valid JSON, no other text:
 }
 
 async function runPillIdentify(imageBlock, imprint) {
-  const currentMeds = state.meds.map(m=>m.name).join(", ")||"none";
+  // Archived (removed/discontinued) meds are excluded — including them here
+  // would misrepresent what this person is actually currently taking for
+  // interaction-checking purposes.
+  const currentMeds = state.meds.filter(m=>!isArchived(m)).map(m=>m.name).join(", ")||"none";
   const content = [];
   if (imageBlock) content.push(imageBlock);
   const photoInstructions = `You are a pill identification expert. The imprint code (letters/numbers debossed or printed on the pill) is the single most reliable identifier — pharmaceutical references map each exact imprint to one specific drug and strength, and different strengths of the same drug often have different, similarly-shaped imprints (e.g. "M523" vs "M522"). Read every character of the imprint literally and carefully, one at a time, before considering general shape/color/size. Do NOT infer the strength from what a similar-looking pill "usually" is — only state a strength you can justify from the imprint characters you actually read clearly. If part of the imprint is blurry, cut off, or ambiguous, do not guess a specific number with high confidence — instead mark "confidence" as "medium" or "low" and say in "notes" which part of the imprint was unclear.`;
@@ -2664,14 +2702,14 @@ function buildDashboard(filtered, taken, pending, pct) {
   let capped = true;
   if (activeFilter === "taken") { sectionTitle = "Taken Today"; sectionMeds = filtered.filter(m=>isTakenToday(m)); capped = false; }
   else if (activeFilter === "pending") { sectionTitle = "Pending"; sectionMeds = filtered.filter(m=>!isTakenToday(m)); capped = false; }
-  else if (activeFilter === "all") { sectionTitle = "All Medications"; sectionMeds = state.meds.slice(); capped = false; }
+  else if (activeFilter === "all") { sectionTitle = "All Medications"; sectionMeds = state.meds.filter(m=>!isArchived(m)); capped = false; }
   const visible = capped ? sectionMeds.slice(0,3) : sectionMeds;
 
   return `
 <div class="stat-row">
   ${tile("taken", taken, "Taken Today", "#c9a66b")}
   ${tile("pending", pending, "Pending", "#8a4b3a", `color:${pending>0?"#e8a090":"#8c9e7a"}`)}
-  ${tile("all", state.meds.length, "Total Rx", "#6b8fad")}
+  ${tile("all", state.meds.filter(m=>!isArchived(m)).length, "Total Rx", "#6b8fad")}
 </div>
 <div class="progress-card">
   <div class="progress-label"><span>Daily Progress</span><span style="color:#c9a66b;font-weight:700">${taken}/${filtered.length}</span></div>
@@ -3022,7 +3060,10 @@ ${personDocs.map(doc=>`
 function buildEmergency() {
   const activePerson = state.emergencyPerson||state.people[0];
   const profile = state.emergencyProfiles[activePerson]||{};
-  const personMeds = state.meds.filter(m=>m.person===activePerson);
+  // Excludes archived meds deliberately — this list is shown as "current
+  // medications" on an emergency card; a discontinued/removed medication
+  // appearing here would be actively misleading in an emergency.
+  const personMeds = state.meds.filter(m=>m.person===activePerson && !isArchived(m));
 
   if (state.editingEmergency) {
     const ef = state.emergencyForm;
@@ -3076,7 +3117,7 @@ ${profile.conditions?`<div class="emergency-card"><div class="section-title-sm">
 
 function buildReport(filtered) {
   const activePerson = state.reportPerson||state.people[0];
-  const personMeds = state.meds.filter(m=>m.person===activePerson && !isPastCourse(m));
+  const personMeds = state.meds.filter(m=>m.person===activePerson && !isPastCourse(m) && !isArchived(m));
   const takenMeds = personMeds.filter(m=>isTakenToday(m));
   const adherencePct = personMeds.length?Math.round(takenMeds.length/personMeds.length*100):0;
   const ep = state.emergencyProfiles[activePerson]||{};
@@ -3084,14 +3125,16 @@ function buildReport(filtered) {
   return `
 <div class="report-header">
   <div><div style="font-weight:700;font-size:16px">Adherence Report</div><div style="font-size:11px;color:#c9a66b;letter-spacing:.1em;margin-top:2px">GENERATED ${today.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}).toUpperCase()}</div></div>
-  <div style="font-size:28px">📊</div>
+  <div style="font-size:28px" class="no-print">📊</div>
 </div>
-<div class="inline-picker">
+<div class="inline-picker no-print">
   ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setReportPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span></button>`).join("")}
 </div>
-<div class="range-btns">
+<div class="range-btns no-print">
   ${[["7","7 Days"],["30","30 Days"],["90","90 Days"]].map(([v,l])=>`<button class="range-btn ${state.reportRange===v?"active":""}" data-action="setReportRange" data-range="${v}">${l}</button>`).join("")}
 </div>
+<button class="no-print" data-action="printReport" style="width:100%;margin-bottom:14px;background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px 16px;font-size:13px;font-family:Georgia,serif;cursor:pointer">🖨️ Print / Save as PDF</button>
+<div id="printable-report">
 <div class="stat-row">
   <div class="stat-card" style="border-color:#c9a66b"><div class="stat-num">${takenMeds.length}</div><div class="stat-label">Taken</div></div>
   <div class="stat-card" style="border-color:#8a4b3a"><div class="stat-num" style="color:#e8a090">${personMeds.length-takenMeds.length}</div><div class="stat-label">Missed</div></div>
@@ -3113,6 +3156,7 @@ function buildReport(filtered) {
   <div style="font-weight:700;font-size:14px;margin-bottom:8px">📝 Notes for Provider</div>
   <div style="font-size:13px;color:#d9c7b9;line-height:1.7">${adherencePct>=90?`${activePerson} shows excellent medication adherence at ${adherencePct}%. No concerns noted.`:adherencePct>=70?`${activePerson} shows good overall adherence at ${adherencePct}%. Some missed doses recorded.`:`${activePerson}'s adherence rate of ${adherencePct}% is below target. Consider discussing barriers at next visit.`}</div>
   ${ep.allergies?`<div style="margin-top:10px;padding:8px 10px;background:#3a1a14;border-radius:8px;font-size:12px;color:#e8a090">⚠️ Allergies on file: ${ep.allergies}</div>`:""}
+</div>
 </div>
 
 <div class="form-card" style="margin-top:16px">
@@ -3415,6 +3459,7 @@ function handleAction(e) {
     case "cancelEmergencyEdit": setState({editingEmergency:false}); break;
     case "setReportPerson": setState({reportPerson:el.dataset.person}); break;
     case "setReportRange": setState({reportRange:el.dataset.range}); break;
+    case "printReport": window.print(); break;
   }
 }
 
