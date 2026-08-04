@@ -539,6 +539,31 @@ function getDoseLog(med) {
   return state.doseEventsByMedId[med.id] || [];
 }
 
+// A med with durationDays set is a short course (e.g. a 7-day antibiotic)
+// rather than an ongoing/chronic medication. courseEndDate returns null for
+// ongoing meds; isPastCourse is a plain date comparison, not a stored flag —
+// current_date isn't immutable so it can't be a generated column, and a
+// cached/stored flag would need a background job or an extra write to flip.
+function courseEndDate(med) {
+  if (!med.durationDays) return null;
+  const start = new Date((med.startDate || todayStr()) + "T00:00:00");
+  const end = new Date(start);
+  end.setDate(end.getDate() + med.durationDays);
+  return end;
+}
+function isPastCourse(med) {
+  const end = courseEndDate(med);
+  return end ? new Date(todayStr() + "T00:00:00") >= end : false;
+}
+
+// Single source of truth for "was this med taken today" — derived live from
+// dose_events rather than a separately-stored/synced boolean, so there's
+// never a second copy of this fact that can drift out of sync.
+function isTakenToday(med) {
+  const today = todayStr();
+  return getDoseLog(med).some(l => l.key.startsWith(med.id + "|" + today) && l.status === "taken");
+}
+
 // Thin write-through wrappers: local state + localStorage are always updated
 // first (existing behavior), these just mirror the change to Supabase in the
 // background. Errors are swallowed (console.warn only) so a network hiccup
@@ -889,7 +914,9 @@ function realInit() {
       }
     }
     state.doseEventsByMedId[m.id] = doseLog;
-    const { doseLog: _drop, ...rest } = m;
+    // Drop both the old nested doseLog and the legacy taken boolean — taken
+    // is now derived live via isTakenToday(), never stored on the object.
+    const { doseLog: _drop, taken: _takenDrop, ...rest } = m;
     return {
       ...rest,
       times,
@@ -966,15 +993,6 @@ async function loadHouseholdDataFromSupabase() {
     const byMed = {};
     doseRes.data.forEach(ev => { (byMed[ev.medication_id] = byMed[ev.medication_id] || []).push(rowToDoseEvent(ev)); });
     state.doseEventsByMedId = byMed;
-    // Back-compat: keep the legacy `taken` flag in sync with today's dose
-    // events so existing dashboard/report code (which still reads med.taken)
-    // keeps working without a rewrite (see plan's "explicitly out of scope").
-    const todayKeyPrefix = (medId) => medId + "|" + today;
-    state.meds.forEach(m => {
-      const log = byMed[m.id] || [];
-      m.taken = log.some(l => l.key.startsWith(todayKeyPrefix(m.id)) && l.status === "taken");
-    });
-    save("ss:meds", state.meds);
     save("ss:doseEvents", state.doseEventsByMedId);
   }
 
@@ -1023,7 +1041,9 @@ function rowToMed(row) {
     notes: row.notes,
     pharmacy: row.pharmacy,
     nextDue: row.next_due,
-    taken: false // recomputed from dose_events right after this mapping runs
+    startDate: row.start_date || todayStr(),
+    durationDays: row.duration_days ?? null,
+    refillsRemaining: row.refills_remaining ?? null
   };
 }
 function rowToDoseEvent(ev) {
@@ -1085,7 +1105,6 @@ function handleMedicationChange(payload) {
   } else {
     const incoming = rowToMed(payload.new);
     const existing = state.meds.find(m => m.id === incoming.id);
-    if (existing) incoming.taken = existing.taken; // preserve locally-computed back-compat flag
     state.meds = existing ? state.meds.map(m => m.id === incoming.id ? incoming : m) : [...state.meds, incoming];
   }
   save("ss:meds", state.meds);
@@ -1100,14 +1119,6 @@ function handleDoseEventChange(payload) {
   const filtered = log.filter(l => l.key !== key);
   state.doseEventsByMedId[medId] = payload.eventType === "DELETE" ? filtered : [...filtered, rowToDoseEvent(payload.new)];
   save("ss:doseEvents", state.doseEventsByMedId);
-
-  // Keep the legacy `taken` flag in sync for today's doses (see realInit()).
-  const med = state.meds.find(m => m.id === medId);
-  if (med) {
-    const today = todayStr();
-    med.taken = (state.doseEventsByMedId[medId] || []).some(l => l.key.startsWith(medId + "|" + today) && l.status === "taken");
-    save("ss:meds", state.meds);
-  }
   scheduleRender();
 }
 
@@ -1250,8 +1261,6 @@ function takeMed(id) {
     const key = doseKey(id, today, targetTime);
     logDoseAction(id, key, "taken");
   }
-  state.meds = state.meds.map(m=>m.id===id?{...m,taken:true}:m);
-  save("ss:meds", state.meds);
   showToast("✓ Medication marked as taken");
 }
 function deleteMed(id) {
@@ -1264,19 +1273,26 @@ function deleteMed(id) {
 }
 function openAdd() {
   state.editMedId = null;
-  state.form = {person:state.selectedPerson==="All"?"Your Name":state.selectedPerson,name:"",dose:"",frequency:"Daily",time:"08:00",notes:"",pharmacy:""};
+  state.form = {person:state.selectedPerson==="All"?"Your Name":state.selectedPerson,name:"",dose:"",frequency:"Daily",times:["08:00"],startDate:todayStr(),durationDays:"",refillsRemaining:"",notes:"",pharmacy:""};
   setState({view:"add"});
 }
 function openEdit(med) {
   state.editMedId = med.id;
-  state.form = {person:med.person,name:med.name,dose:med.dose,frequency:med.frequency,time:med.time,notes:med.notes||"",pharmacy:med.pharmacy||""};
+  state.form = {
+    person:med.person,name:med.name,dose:med.dose,frequency:med.frequency,
+    times: (med.times && med.times.length) ? [...med.times] : [med.time || "08:00"],
+    startDate: med.startDate || todayStr(),
+    durationDays: med.durationDays ?? "",
+    refillsRemaining: med.refillsRemaining ?? "",
+    notes:med.notes||"",pharmacy:med.pharmacy||""
+  };
   setState({view:"add"});
 }
 // Builds a medications-table row from the client's form shape. `id` is
 // omitted for new meds so Postgres mints a uuid (upsert JSON-stringifies the
 // row, which drops undefined keys).
 function medRowForCloud(form, id) {
-  const times = [form.time || "08:00"];
+  const times = (form.times && form.times.length) ? form.times : [form.time || "08:00"];
   return {
     ...(id ? { id } : {}),
     household_id: state.householdId,
@@ -1289,7 +1305,10 @@ function medRowForCloud(form, id) {
     with_food: form.withFood || false,
     notes: form.notes,
     pharmacy: form.pharmacy,
-    next_due: "Today " + times[0]
+    next_due: "Today " + times[0],
+    start_date: form.startDate || todayStr(),
+    duration_days: form.durationDays ? parseInt(form.durationDays, 10) : null,
+    refills_remaining: (form.refillsRemaining !== "" && form.refillsRemaining != null) ? parseInt(form.refillsRemaining, 10) : null
   };
 }
 
@@ -1301,10 +1320,10 @@ async function submitForm() {
   const draft = medRowForCloud(state.form, isEdit ? editedId : undefined);
   const saved = await cloudUpsert("medications", draft);
   // Offline/failure fallback: keep working locally with a client-generated id.
-  const fresh = saved ? rowToMed(saved) : { id: editedId || (Date.now()+""), ...state.form, times: draft.times, nextDue: draft.next_due, taken: false };
+  const fresh = saved ? rowToMed(saved) : { id: editedId || (Date.now()+""), ...state.form, times: draft.times, nextDue: draft.next_due };
 
   if (isEdit) {
-    state.meds = state.meds.map(m=>m.id===editedId?{...m,...fresh,taken:m.taken}:m);
+    state.meds = state.meds.map(m=>m.id===editedId?{...m,...fresh}:m);
     showToast("✓ Medication updated");
   } else {
     state.meds.push(fresh);
@@ -1369,6 +1388,10 @@ function addFromScan() {
     times: Array.isArray(r.times) && r.times.length ? [...r.times] : ["08:00"],
     withFood: !!r.withFood,
     confidence: r.confidence || {},
+    // The AI's refills field is a loose string ("3", "2 refills", "Not
+    // found") not guaranteed to already be a clean integer.
+    refillsRemaining: (function(){ const m = String(r.refills||"").match(/\d+/); return m ? parseInt(m[0],10) : null; })(),
+    durationDays: null, // scan doesn't extract a course length; stays user-editable, defaults to ongoing
     notes: [
       r.specialInstructions || "",
       r.prescriber ? "Prescriber: "+r.prescriber : "",
@@ -1387,10 +1410,12 @@ async function confirmScheduleSave() {
   const doseEl = document.getElementById("cs-dose");
   const freqEl = document.getElementById("cs-freq");
   const foodEl = document.getElementById("cs-food");
+  const refillsEl = document.getElementById("cs-refills");
   if (nameEl) c.name = nameEl.value.trim();
   if (doseEl) c.dose = doseEl.value.trim();
   if (freqEl) c.frequency = freqEl.value;
   if (foodEl) c.withFood = foodEl.checked;
+  if (refillsEl) c.refillsRemaining = refillsEl.value ? parseInt(refillsEl.value, 10) : null;
   // Read time inputs
   const timeInputs = document.querySelectorAll("[data-time-idx]");
   if (timeInputs.length) {
@@ -1410,13 +1435,17 @@ async function confirmScheduleSave() {
     with_food: c.withFood,
     notes: c.notes,
     pharmacy: "",
-    next_due: "Today " + (c.times[0] || "08:00")
+    next_due: "Today " + (c.times[0] || "08:00"),
+    start_date: todayStr(),
+    duration_days: c.durationDays ? parseInt(c.durationDays, 10) : null,
+    refills_remaining: c.refillsRemaining ?? null
   };
   const saved = await cloudUpsert("medications", draft);
   const fresh = saved ? rowToMed(saved) : {
     id: Date.now()+"", person: c.person, name: c.name, dose: c.dose, frequency: c.frequency,
     times: c.times, time: c.times[0] || "08:00", withFood: c.withFood, notes: c.notes,
-    pharmacy: "", nextDue: draft.next_due, taken: false
+    pharmacy: "", nextDue: draft.next_due,
+    startDate: draft.start_date, durationDays: draft.duration_days, refillsRemaining: draft.refills_remaining
   };
 
   state.meds.push(fresh);
@@ -1455,6 +1484,27 @@ function removeTimeFromConfirm(idx) {
     state.scheduleConfirm.times = Array.from(timeInputs).map(el => el.value).filter(Boolean);
   }
   state.scheduleConfirm.times.splice(idx, 1);
+  render();
+}
+
+// Same pattern as addTimeToConfirm/removeTimeFromConfirm above, but for the
+// main Add/Edit medication form (state.form) instead of the scan-confirm
+// screen (state.scheduleConfirm) — keeps multi-dose times working in both
+// places instead of collapsing to a single time.
+function addTimeToForm() {
+  const timeInputs = document.querySelectorAll("[data-time-idx]");
+  if (timeInputs.length) {
+    state.form.times = Array.from(timeInputs).map(el => el.value).filter(Boolean);
+  }
+  state.form.times.push("12:00");
+  render();
+}
+function removeTimeFromForm(idx) {
+  const timeInputs = document.querySelectorAll("[data-time-idx]");
+  if (timeInputs.length) {
+    state.form.times = Array.from(timeInputs).map(el => el.value).filter(Boolean);
+  }
+  state.form.times.splice(idx, 1);
   render();
 }
 
@@ -1534,6 +1584,7 @@ function getTodayDoses() {
   const events = [];
   state.meds.forEach(m => {
     if (m.frequency === "As needed") return;
+    if (isPastCourse(m)) return;
     const times = (m.times && m.times.length) ? m.times : (m.time ? [m.time] : []);
     times.forEach(t => {
       const key = doseKey(m.id, today, t);
@@ -1774,17 +1825,21 @@ async function syncPushSchedule() {
     console.warn("No subscription ID — push disabled?");
     return;
   }
-  // Filter meds that have actual schedules (skip "as needed")
+  // Filter meds that have actual schedules (skip "as needed" and completed courses)
   const scheduleableMeds = state.meds
-    .filter(m => m.frequency !== "As needed" && m.times && m.times.length > 0)
-    .map(m => ({
-      id: m.id,
-      name: m.name,
-      dose: m.dose,
-      person: m.person,
-      times: m.times,
-      frequency: m.frequency
-    }));
+    .filter(m => m.frequency !== "As needed" && m.times && m.times.length > 0 && !isPastCourse(m))
+    .map(m => {
+      const end = courseEndDate(m);
+      return {
+        id: m.id,
+        name: m.name,
+        dose: m.dose,
+        person: m.person,
+        times: m.times,
+        frequency: m.frequency,
+        endDate: end ? end.toISOString().slice(0, 10) : null
+      };
+    });
 
   if (scheduleableMeds.length === 0) return;
 
@@ -1838,7 +1893,7 @@ function maybeResyncPushes() {
 // The service worker passes the action via postMessage OR via URL query string.
 function handleNotificationAction(action, medId, doseTime) {
   if (!action || !medId) return;
-  const med = state.meds.find(m => m.id === parseInt(medId));
+  const med = state.meds.find(m => m.id === medId);
   if (!med) return;
   // doseTime format: "2026-05-09T08:00" — extract just the time part
   const timePart = doseTime && doseTime.includes("T") ? doseTime.split("T")[1] : "08:00";
@@ -1847,9 +1902,6 @@ function handleNotificationAction(action, medId, doseTime) {
 
   if (action === "take") {
     logDoseAction(med.id, key, "taken");
-    // Update legacy taken flag for backward compat
-    state.meds = state.meds.map(m => m.id === med.id ? {...m, taken: true} : m);
-    save("ss:meds", state.meds);
     showToast("✓ Logged as taken");
     render();
   } else if (action === "snooze") {
@@ -2188,8 +2240,8 @@ function render() {
 
 function buildApp() {
   const filtered = getFiltered();
-  const taken = filtered.filter(m=>m.taken).length;
-  const pending = filtered.filter(m=>!m.taken).length;
+  const taken = filtered.filter(m=>isTakenToday(m)).length;
+  const pending = filtered.filter(m=>!isTakenToday(m)).length;
   const pct = filtered.length ? Math.round(taken/filtered.length*100) : 0;
 
   const weekDays = Array.from({length:7},(_,i)=>{
@@ -2346,7 +2398,7 @@ function buildView(filtered, taken, pending, pct, weekDays) {
 }
 
 function buildDashboard(filtered, taken, pending, pct) {
-  const upcoming = filtered.filter(m=>!m.taken).slice(0,3);
+  const upcoming = filtered.filter(m=>!isTakenToday(m)).slice(0,3);
   return `
 <div class="stat-row">
   <div class="stat-card" style="border-color:#c9a66b"><div class="stat-num">${taken}</div><div class="stat-label">Taken Today</div></div>
@@ -2363,16 +2415,24 @@ ${upcoming.length===0?(state.meds.length===0?`<div class="empty-state"><div styl
 }
 
 function buildMeds(filtered) {
+  const active = filtered.filter(m => !isPastCourse(m));
+  const past = filtered.filter(m => isPastCourse(m));
   return `
 <div class="section-header"><span>All Medications</span><button class="add-btn" data-action="openAdd">+ Add New</button></div>
-${filtered.length===0?`<div class="empty-state"><div style="font-size:36px;margin-bottom:8px">💊</div>No medications yet.<br/><span style="font-size:14px;opacity:.8">Tap <b>+ Add New</b> or use <b>Scan</b> to get started.</span></div>`:""}
-${filtered.map(m=>buildMedCard(m,false)).join("")}`;
+${active.length===0 && past.length===0?`<div class="empty-state"><div style="font-size:36px;margin-bottom:8px">💊</div>No medications yet.<br/><span style="font-size:14px;opacity:.8">Tap <b>+ Add New</b> or use <b>Scan</b> to get started.</span></div>`:""}
+${active.map(m=>buildMedCard(m,false)).join("")}
+${past.length?`<div class="section-header" style="margin-top:20px"><span>Past Medications</span></div>${past.map(m=>buildMedCard(m,false,true)).join("")}`:""}`;
 }
 
-function buildMedCard(m, compact) {
+function buildMedCard(m, compact, isPast) {
   const c = getColor(m.person);
+  const taken = !isPast && isTakenToday(m);
+  const refillsBadge = m.refillsRemaining != null ? `<span class="person-tag" style="background:#3a2e2455;color:#c9a66b;margin-left:6px">${m.refillsRemaining} refill${m.refillsRemaining===1?"":"s"}</span>` : "";
+  const dueLine = isPast
+    ? `Course ended ${(courseEndDate(m)||new Date()).toLocaleDateString("en-US",{month:"short",day:"numeric"})}`
+    : `⏰ ${m.nextDue}${taken?`<span class="taken-badge">✓ Taken</span>`:""}`;
   return `
-<div class="med-card ${m.taken?"taken":""}" style="border-left-color:${c}">
+<div class="med-card ${taken?"taken":""} ${isPast?"past-course":""}" style="border-left-color:${c}${isPast?";opacity:.6":""}">
   <div class="med-card-top">
     <div class="med-dot" style="background:${c}"></div>
     <div style="flex:1">
@@ -2381,10 +2441,11 @@ function buildMedCard(m, compact) {
       ${!compact&&m.notes?`<div class="med-notes">${m.notes}</div>`:""}
     </div>
     <div class="person-tag" style="background:${c}33;color:${c}">${m.person}</div>
+    ${refillsBadge}
   </div>
-  <div class="med-next-due">⏰ ${m.nextDue}${m.taken?`<span class="taken-badge">✓ Taken</span>`:""}</div>
+  <div class="med-next-due">${dueLine}</div>
   <div class="med-btns">
-    ${!m.taken?`<button class="btn-take" data-action="takeMed" data-id="${m.id}">✓ Take</button>`:""}
+    ${!isPast && !taken?`<button class="btn-take" data-action="takeMed" data-id="${m.id}">✓ Take</button>`:""}
     <button class="btn-edit" data-action="editMed" data-id="${m.id}">Edit</button>
     <button class="btn-delete" data-action="deleteMed" data-id="${m.id}">Remove</button>
   </div>
@@ -2417,8 +2478,11 @@ function buildAdd() {
         ${freqs.map(o=>`<option ${f.frequency===o?"selected":""}>${o}</option>`).join("")}
       </select>
     </label>
-    <label class="form-label">Time
-      <input type="time" class="form-input" id="f-time" value="${f.time}"/>
+    <label class="form-label">Duration (days, optional)
+      <input type="number" min="1" class="form-input" id="f-duration" value="${f.durationDays||""}" placeholder="Leave blank for ongoing"/>
+    </label>
+    <label class="form-label">Refills remaining
+      <input type="number" min="0" class="form-input" id="f-refills" value="${f.refillsRemaining??""}" placeholder="Optional"/>
     </label>
     <label class="form-label">Pharmacy
       <input class="form-input" id="f-pharmacy" value="${f.pharmacy||""}" placeholder="CVS, Walgreens..."/>
@@ -2427,6 +2491,20 @@ function buildAdd() {
       <textarea class="form-input" id="f-notes" placeholder="Special instructions...">${f.notes||""}</textarea>
     </label>
   </div>
+
+  <div class="form-label">Reminder Times</div>
+  <div style="background:#1a1208;border-radius:10px;padding:10px;margin-bottom:12px">
+    ${(f.times||[]).length === 0 ? `<div style="color:#7a6a62;font-size:13px;padding:6px 0">No times set (as-needed medication)</div>` :
+      f.times.map((t, i) => `
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <input type="time" class="form-input" data-time-idx="${i}" value="${t}" style="flex:1;margin:0"/>
+          <button class="remove-btn" data-action="removeTimeFromForm" data-idx="${i}" style="width:36px;height:36px;flex-shrink:0">×</button>
+        </div>
+      `).join("")
+    }
+    <button class="scan-btn secondary" data-action="addTimeToForm" style="margin-top:4px;font-size:13px">+ Add Another Time</button>
+  </div>
+
   <button class="submit-btn" data-action="submitForm">${state.editMedId?"Save Changes":"Add Medication"}</button>
 </div>`;
 }
@@ -2512,6 +2590,10 @@ function buildConfirmSchedule() {
   <label class="form-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
     <input type="checkbox" id="cs-food" ${c.withFood?"checked":""} style="width:18px;height:18px;accent-color:#c9a66b"/>
     <span>Take with food</span>
+  </label>
+
+  <label class="form-label">Refills remaining
+    <input type="number" min="0" class="form-input" id="cs-refills" value="${c.refillsRemaining??""}" placeholder="Optional"/>
   </label>
 
   ${c.notes ? `<div class="form-label" style="margin-top:14px">Label Details
@@ -2719,8 +2801,8 @@ ${profile.conditions?`<div class="emergency-card"><div class="section-title-sm">
 
 function buildReport(filtered) {
   const activePerson = state.reportPerson||state.people[0];
-  const personMeds = state.meds.filter(m=>m.person===activePerson);
-  const takenMeds = personMeds.filter(m=>m.taken);
+  const personMeds = state.meds.filter(m=>m.person===activePerson && !isPastCourse(m));
+  const takenMeds = personMeds.filter(m=>isTakenToday(m));
   const adherencePct = personMeds.length?Math.round(takenMeds.length/personMeds.length*100):0;
   const ep = state.emergencyProfiles[activePerson]||{};
 
@@ -2748,8 +2830,8 @@ function buildReport(filtered) {
   <div style="font-weight:700;font-size:14px;margin-bottom:12px">Medication Breakdown</div>
   ${personMeds.length===0?`<div style="color:#5a4a43;font-size:13px">No medications on file</div>`:""}
   ${personMeds.map(med=>{
-    const pct2=med.taken?100:0; const c=getColor(med.person);
-    return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px"><span style="font-weight:600">${med.name} <span style="color:#8a7a70;font-weight:400">· ${med.dose}</span></span><span style="color:${c};font-weight:700">${pct2}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct2}%;background:${c}"></div></div><div style="font-size:11px;color:#8a7a70;margin-top:3px">${med.frequency} · ${med.taken?"✓ Taken today":"⏳ Pending today"}</div></div>`;
+    const takenToday=isTakenToday(med); const pct2=takenToday?100:0; const c=getColor(med.person);
+    return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px"><span style="font-weight:600">${med.name} <span style="color:#8a7a70;font-weight:400">· ${med.dose}</span></span><span style="color:${c};font-weight:700">${pct2}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct2}%;background:${c}"></div></div><div style="font-size:11px;color:#8a7a70;margin-top:3px">${med.frequency} · ${takenToday?"✓ Taken today":"⏳ Pending today"}</div></div>`;
   }).join("")}
 </div>
 <div class="form-card">
@@ -2851,7 +2933,7 @@ ${weekDays.map((d,i)=>{
       ${isT?`<span class="today-badge">Today</span>`:""}
     </div>
     ${dayMeds.length===0?`<div style="color:#7a6a62;font-size:13px;padding:4px 0">No scheduled medications</div>`:""}
-    ${dayMeds.map(med=>`<div class="schedule-med-row"><div style="width:8px;height:8px;border-radius:50%;background:${getColor(med.person)};flex-shrink:0"></div><div><div style="font-weight:600;font-size:14px">${med.name} · ${med.dose}</div><div style="color:#d9c7b9;font-size:12px">${med.time} · ${med.person}</div></div>${isT&&med.taken?`<span class="taken-badge" style="margin-left:auto">✓</span>`:""}</div>`).join("")}
+    ${dayMeds.map(med=>`<div class="schedule-med-row"><div style="width:8px;height:8px;border-radius:50%;background:${getColor(med.person)};flex-shrink:0"></div><div><div style="font-weight:600;font-size:14px">${med.name} · ${med.dose}</div><div style="color:#d9c7b9;font-size:12px">${med.time} · ${med.person}</div></div>${isT&&isTakenToday(med)?`<span class="taken-badge" style="margin-left:auto">✓</span>`:""}</div>`).join("")}
   </div>`;
 }).join("")}`;
 }
@@ -2912,6 +2994,8 @@ function handleAction(e) {
     case "cancelConfirmSchedule": cancelConfirmSchedule(); break;
     case "addTimeToConfirm": addTimeToConfirm(); break;
     case "removeTimeFromConfirm": removeTimeFromConfirm(parseInt(el.dataset.idx)); break;
+    case "addTimeToForm": addTimeToForm(); break;
+    case "removeTimeFromForm": removeTimeFromForm(parseInt(el.dataset.idx)); break;
     case "reminderTake": reminderTake(); break;
     case "reminderSnooze": reminderSnooze(); break;
     case "reminderSkip": reminderSkip(); break;
@@ -2926,7 +3010,7 @@ function handleAction(e) {
     case "clearPill": setState({pillResult:null,pillImage:null,pillImprint:"",pillError:null}); break;
     case "addPillToMeds": {
       const r=state.pillResult;
-      state.form={person:state.selectedPerson==="All"?"Your Name":state.selectedPerson,name:r.name+(r.strength?" "+r.strength:""),dose:r.strength||"",frequency:"Daily",time:"08:00",notes:`Identified via pill lookup. ${r.usedFor}`,pharmacy:""};
+      state.form={person:state.selectedPerson==="All"?"Your Name":state.selectedPerson,name:r.name+(r.strength?" "+r.strength:""),dose:r.strength||"",frequency:"Daily",times:["08:00"],startDate:todayStr(),durationDays:"",refillsRemaining:"",notes:`Identified via pill lookup. ${r.usedFor}`,pharmacy:""};
       setState({view:"add",editMedId:null});
       break;
     }
@@ -2960,7 +3044,12 @@ function readFormAndSubmit() {
   state.form.name = document.getElementById("f-name")?.value || "";
   state.form.dose = document.getElementById("f-dose")?.value || "";
   state.form.frequency = document.getElementById("f-freq")?.value || "Daily";
-  state.form.time = document.getElementById("f-time")?.value || "08:00";
+  const timeInputs = document.querySelectorAll("[data-time-idx]");
+  state.form.times = timeInputs.length ? Array.from(timeInputs).map(el => el.value).filter(Boolean) : (state.form.times || ["08:00"]);
+  const durationEl = document.getElementById("f-duration");
+  const refillsEl = document.getElementById("f-refills");
+  state.form.durationDays = durationEl ? durationEl.value : "";
+  state.form.refillsRemaining = refillsEl ? refillsEl.value : "";
   state.form.pharmacy = document.getElementById("f-pharmacy")?.value || "";
   state.form.notes = document.getElementById("f-notes")?.value || "";
   submitForm();

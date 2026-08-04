@@ -93,6 +93,9 @@ exports.handler = async function (event, context) {
     const times = Array.isArray(med.times) ? med.times : [];
     if (times.length === 0) continue; // "as needed" meds — no schedule
     const freq = med.frequency || "Daily";
+    // Short-course meds (e.g. a 7-day antibiotic) carry an endDate — never
+    // schedule a push at or after it, regardless of daysAhead.
+    const medEndDate = med.endDate ? new Date(med.endDate + "T00:00:00") : null;
 
     // For each day in the window
     for (let dayOffset = 0; dayOffset < daysAhead; dayOffset++) {
@@ -108,6 +111,8 @@ exports.handler = async function (event, context) {
 
         // Skip times in the past (today's earlier doses already passed)
         if (sendAt.getTime() <= now.getTime() + 60000) continue;
+        // Skip times at or past this medication's course end date
+        if (medEndDate && sendAt.getTime() >= medEndDate.getTime()) continue;
 
         schedules.push({
           med,

@@ -43,6 +43,9 @@ create table medications (
   notes text,
   pharmacy text,
   next_due text,                      -- legacy display string, kept for parity; not authoritative
+  start_date date not null default current_date,   -- anchors a course window (see 0007)
+  duration_days integer check (duration_days is null or duration_days > 0), -- null = ongoing/chronic
+  refills_remaining integer,          -- null = not tracked, distinct from 0 = none left
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
