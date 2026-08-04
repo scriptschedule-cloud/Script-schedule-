@@ -75,6 +75,24 @@ exports.handler = async function (event) {
   if (body.debug === true) {
     const raw = SERVICE_ROLE_KEY;
     const trimmed = raw.trim();
+    let claims = null;
+    try {
+      const payloadSegment = raw.split(".")[1];
+      const padded = payloadSegment.replace(/-/g, "+").replace(/_/g, "/");
+      const json = Buffer.from(padded, "base64").toString("utf8");
+      const parsed = JSON.parse(json);
+      claims = {
+        role: parsed.role,
+        ref: parsed.ref,
+        iss: parsed.iss,
+        iat: parsed.iat,
+        exp: parsed.exp,
+        expiresAt: parsed.exp ? new Date(parsed.exp * 1000).toISOString() : null,
+        isExpired: parsed.exp ? (Date.now() > parsed.exp * 1000) : null
+      };
+    } catch (e) {
+      claims = { decodeError: String(e.message || e) };
+    }
     return {
       statusCode: 200,
       headers,
@@ -88,7 +106,8 @@ exports.handler = async function (event) {
           startsWithSbSecret: raw.startsWith("sb_secret_"),
           prefix: raw.slice(0, 12),
           suffix: raw.slice(-6),
-          dotCount: (raw.match(/\./g) || []).length // a JWT has exactly 2 dots
+          dotCount: (raw.match(/\./g) || []).length, // a JWT has exactly 2 dots
+          claims
         }
       })
     };
