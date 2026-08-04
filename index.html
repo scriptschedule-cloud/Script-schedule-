@@ -461,6 +461,9 @@ let state = {
   displayNameInput: "",
   editingFamilyMemberId: null,
   familyMemberNameInput: "",
+  showDeleteAccountConfirm: false,
+  deleteAccountConfirmInput: "",
+  deletingAccount: false,
   editMedId: null,
   form: {person:"Your Name",name:"",dose:"",frequency:"Daily",time:"08:00",notes:"",pharmacy:""},
   scanImagePreview: null,
@@ -1484,6 +1487,56 @@ function removePerson(name) {
   // ON DELETE CASCADE; other devices pick up the cleanup via Realtime DELETE
   // events (see plan's "orphaned data" note — resolved for free here).
   if (fm) cloudDelete("family_members", fm.id);
+}
+// Permanently deletes the signed-in user's account and, if they're the sole
+// member of their household, all of that household's cloud data too (via
+// the delete_my_account RPC). Unlike "Reset This Device" (which only ever
+// clears local storage), this actually removes data from Supabase and the
+// user's ability to log in at all — a two-step process since deleting
+// login credentials requires the service-role key, which only
+// netlify/functions/delete-account.js has access to.
+async function deleteMyAccountAndData() {
+  if (state.deleteAccountConfirmInput.trim().toUpperCase() !== "DELETE") {
+    showToast('Type "DELETE" to confirm', "error");
+    return;
+  }
+  setState({ deletingAccount: true });
+  try {
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (!session) { showToast("Not signed in", "error"); setState({ deletingAccount: false }); return; }
+
+    const { error: rpcError } = await sbClient.rpc("delete_my_account");
+    if (rpcError) {
+      console.warn("delete_my_account RPC failed", rpcError);
+      showToast("Couldn't delete your data — try again or contact support.", "error");
+      setState({ deletingAccount: false });
+      return;
+    }
+
+    const resp = await fetch("/.netlify/functions/delete-account", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessToken: session.access_token })
+    });
+    const data = await resp.json();
+
+    if (!data.ok) {
+      console.warn("delete-account function failed", data);
+      showToast("Your data was deleted, but we couldn't remove your login — contact support to finish.", "error");
+      setState({ deletingAccount: false });
+      return;
+    }
+
+    await sbClient.auth.signOut();
+    ["ss:meds","ss:people","ss:pets","ss:colors","ss:emergency","ss:docs","ss-td","ss:push_enabled","ss:last_push_sync"]
+      .forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+    showToast("✓ Account deleted");
+    setTimeout(() => location.reload(), 1200);
+  } catch (e) {
+    console.warn("deleteMyAccountAndData failed", e);
+    showToast("Something went wrong — try again.", "error");
+    setState({ deletingAccount: false });
+  }
 }
 // Renames a family member via the rename_family_member RPC (existed in the
 // schema since 0001 but had no UI hookup — the only way to fix a typo was
@@ -2723,6 +2776,7 @@ function buildScan() {
     <label class="scan-btn">📷 Take Photo<input type="file" accept="image/*" capture="environment" style="display:none" data-upload="scan"/></label>
     <label class="scan-btn secondary">🖼 Choose Image<input type="file" accept="image/*" style="display:none" data-upload="scan"/></label>
   </div>
+  <div style="font-size:11px;color:#7a6a62;text-align:center;margin-top:8px;line-height:1.5">Photos are sent to a third-party AI service to read the label, then discarded — only the extracted details are saved.</div>
   ${state.scanError?`<div class="error-box">⚠️ ${state.scanError}</div>`:""}
   ${state.scanResult?`
     <div class="scan-result-card">
@@ -2828,6 +2882,7 @@ ${state.pillTab==="photo"?`
     <label class="scan-btn secondary">🖼 Choose Image<input type="file" accept="image/*" style="display:none" data-upload="pill"/></label>
   </div>
   <div class="hint-text">Tip: Lay pill flat on white paper, show both sides if possible</div>
+  <div style="font-size:11px;color:#7a6a62;text-align:center;margin-top:8px;line-height:1.5">Photos are sent to a third-party AI service to identify the pill, then discarded — only the result is saved.</div>
 </div>`:``}
 ${state.pillTab==="imprint"?`
 <div class="scan-card">
@@ -2931,6 +2986,7 @@ ${doc.followUp?`<div class="form-card" style="margin-bottom:12px;border-left:3px
     </div>
   </div>
   <div class="hint-text" style="margin-top:6px">📱 Tip: Screenshot your MyChart results and use Gallery</div>
+  <div style="font-size:11px;color:#7a6a62;text-align:center;margin-top:8px;line-height:1.5">Documents are sent to a third-party AI service (Anthropic) to extract the details, then discarded — only the extracted text is saved.</div>
 </div>
 ${state.docUploading?`<div style="background:#261e16;border-radius:12px;padding:16px;text-align:center;margin-bottom:14px;border:1px solid #c9a66b44"><div style="font-size:28px;margin-bottom:8px">🤖</div><div style="color:#c9a66b;font-weight:600;font-size:14px">Claude is reading the document…</div><div style="color:#8a7a70;font-size:12px;margin-top:4px">Extracting lab values, diagnoses & summary</div></div>`:""}
 ${personDocs.length===0&&!state.docUploading?`<div class="empty-state"><div style="font-size:36px;margin-bottom:8px">📂</div>No documents for ${activePerson} yet.</div>`:""}
@@ -3105,8 +3161,22 @@ function buildReport(filtered) {
 
 <div style="margin-top:20px;padding:16px;background:#1a1208;border-radius:14px;border:1px solid #3a2e24;text-align:center">
   <div style="font-size:12px;color:#5a4a43;margin-bottom:10px;letter-spacing:.05em;text-transform:uppercase">App Settings</div>
-  <button data-action="resetApp" style="background:#3a1a14;color:#e8a090;border:1px solid #7a2a20;border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">🗑️ Reset App — Clear All Data & Start Fresh</button>
-  <div style="font-size:11px;color:#4a3a34;margin-top:8px;line-height:1.5">Removes all medications, family members and saved data.<br>Use this to start fresh or share with a new user.</div>
+  <button data-action="resetApp" style="background:#3a1a14;color:#e8a090;border:1px solid #7a2a20;border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">🗑️ Reset This Device</button>
+  <div style="font-size:11px;color:#4a3a34;margin-top:8px;line-height:1.5">Clears saved data on THIS device only — your account and cloud data are untouched. Use this to start fresh on a shared device.</div>
+
+  <div style="margin-top:16px;padding-top:16px;border-top:1px solid #3a2e24">
+    ${state.showDeleteAccountConfirm ? `
+      <div style="font-size:12px;color:#e8a090;line-height:1.6;margin-bottom:10px">This permanently deletes your account and, if you're the only member of your household, all its medications, history, and documents. This cannot be undone.</div>
+      <input id="deleteAccountConfirmInput" value="${state.deleteAccountConfirmInput}" placeholder='Type "DELETE" to confirm' style="width:100%;box-sizing:border-box;background:#1e1610;border:1px solid #7a2a20;border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8;margin-bottom:10px;text-align:center"/>
+      <div style="display:flex;gap:8px">
+        <button data-action="cancelDeleteAccount" style="flex:1;background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px;font-size:13px;font-family:Georgia,serif;cursor:pointer">Cancel</button>
+        <button data-action="confirmDeleteAccount" ${state.deletingAccount?"disabled":""} style="flex:1;background:#7a2a20;color:#f0d8d0;border:1px solid #a03a2a;border-radius:10px;padding:10px;font-size:13px;font-family:Georgia,serif;cursor:pointer;opacity:${state.deletingAccount?0.6:1}">${state.deletingAccount?"Deleting...":"Permanently Delete"}</button>
+      </div>
+    ` : `
+      <button data-action="showDeleteAccount" style="background:none;color:#a05040;border:1px solid #4a2a24;border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">Delete My Account</button>
+      <div style="font-size:11px;color:#4a3a34;margin-top:8px;line-height:1.5">Permanently deletes your account and cloud data. See our <a href="/privacy.html" target="_blank" rel="noopener" style="color:#a05040">Privacy Policy</a> for details.</div>
+    `}
+  </div>
 </div>
 
 <div style="margin-top:16px;border-radius:14px;overflow:hidden;border:1px solid rgba(201,166,107,0.25)">
@@ -3145,26 +3215,29 @@ function buildReport(filtered) {
     </div>
 
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:rgba(201,166,107,0.06);border-radius:10px;border:1px solid rgba(201,166,107,0.12)">
-      <span style="font-size:20px;flex-shrink:0">📱</span>
+      <span style="font-size:20px;flex-shrink:0">📷</span>
       <div>
-        <div style="font-size:13px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;margin-bottom:3px">Biometric Lock</div>
-        <div style="font-size:12px;color:#a0896e;line-height:1.6">Face ID and Touch ID supported. Your health dashboard stays locked until it's you opening it.</div>
+        <div style="font-size:13px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;margin-bottom:3px">We Scan the Label. Not Your Cabinet.</div>
+        <div style="font-size:12px;color:#a0896e;line-height:1.6">Photos of labels, pills, and documents are sent to a trusted AI service (Anthropic) to read them — that's how the scan works. Only the extracted details (name, dosage, schedule) are saved; the photo itself is never stored on our servers.</div>
       </div>
     </div>
 
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;background:rgba(201,166,107,0.06);border-radius:10px;border:1px solid rgba(201,166,107,0.12)">
-      <span style="font-size:20px;flex-shrink:0">📷</span>
+      <span style="font-size:20px;flex-shrink:0">🔔</span>
       <div>
-        <div style="font-size:13px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;margin-bottom:3px">We Scan the Label. Not Your Cabinet.</div>
-        <div style="font-size:12px;color:#a0896e;line-height:1.6">When you scan a prescription, we read the label and save only the details — medication name, dosage, and schedule. The raw image is never stored on our servers.</div>
+        <div style="font-size:13px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;margin-bottom:3px">Reminders Stay Generic</div>
+        <div style="font-size:12px;color:#a0896e;line-height:1.6">Phone reminders are delivered via a notification service (OneSignal). We deliberately keep medication names and doses out of that notification — they're only ever shown once you open the app.</div>
       </div>
     </div>
 
   </div>
 
   <div style="background:#161008;padding:12px 16px;text-align:center;border-top:1px solid rgba(201,166,107,0.1)">
-    <div style="font-size:12px;color:#6a5a50;font-style:italic;line-height:1.6;font-family:Georgia,serif">"Your family's prescription information never leaves your account.<br>We don't sell it, share it, or use it for advertising. Ever."</div>
+    <div style="font-size:12px;color:#6a5a50;font-style:italic;line-height:1.6;font-family:Georgia,serif">"We don't sell your data or use it for advertising. Ever.<br>The only third parties involved are the ones that make the app work — and we keep what we send them to the minimum needed."</div>
     <div style="font-size:10px;color:#4a3a34;margin-top:6px;letter-spacing:.06em;text-transform:uppercase">— ScriptSchedule Privacy Promise</div>
+  </div>
+  <div style="padding:10px 16px;text-align:center;border-top:1px solid rgba(201,166,107,0.08)">
+    <a href="/privacy.html" target="_blank" rel="noopener" style="font-size:11px;color:#c9a66b;text-decoration:underline">Read the full Privacy Policy</a>
   </div>
 </div>`;
 }
@@ -3223,6 +3296,13 @@ function attachEvents() {
     fn.addEventListener("keydown", e => { if(e.key==="Enter") renamePersonInline(state.editingFamilyMemberId, state.familyMemberNameInput); if(e.key==="Escape") setState({editingFamilyMemberId:null,familyMemberNameInput:""}); });
     fn.focus();
   }
+  const da = document.getElementById("deleteAccountConfirmInput");
+  if (da) {
+    // Deliberately no Enter-to-submit here — an irreversible delete should
+    // only ever fire from an explicit button click, not a stray keypress.
+    da.addEventListener("input", e => state.deleteAccountConfirmInput = e.target.value);
+    da.focus();
+  }
   const pi = document.getElementById("pillImprintInput");
   if (pi) {
     pi.addEventListener("input", e => { state.pillImprint = e.target.value.toUpperCase(); pi.value = state.pillImprint; });
@@ -3254,6 +3334,9 @@ function handleAction(e) {
     }
     case "saveFamilyMemberName": renamePersonInline(el.dataset.fmId, state.familyMemberNameInput); break;
     case "cancelEditFamilyMemberName": setState({editingFamilyMemberId:null, familyMemberNameInput:""}); break;
+    case "showDeleteAccount": setState({showDeleteAccountConfirm:true, deleteAccountConfirmInput:""}); break;
+    case "cancelDeleteAccount": setState({showDeleteAccountConfirm:false, deleteAccountConfirmInput:""}); break;
+    case "confirmDeleteAccount": deleteMyAccountAndData(); break;
     case "generateInvite": generateHouseholdInvite(); break;
     case "resetApp": {
       if (confirm("Reset all app data? This clears all medications, family members and settings.")) {

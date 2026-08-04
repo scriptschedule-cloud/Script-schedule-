@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Privacy Policy — ScriptSchedule</title>
+<style>
+  body{background:#120c07;color:#d9c7b9;font-family:Georgia,serif;line-height:1.7;margin:0;padding:0}
+  .wrap{max-width:720px;margin:0 auto;padding:40px 20px 80px}
+  h1{color:#f0e6d8;font-size:28px;margin-bottom:4px}
+  .updated{color:#8a7a70;font-size:13px;margin-bottom:32px}
+  h2{color:#c9a66b;font-size:18px;margin-top:36px;margin-bottom:10px;border-bottom:1px solid rgba(201,166,107,0.2);padding-bottom:6px}
+  p,li{font-size:14px;color:#d9c7b9}
+  ul{padding-left:20px}
+  li{margin-bottom:8px}
+  a{color:#c9a66b}
+  .callout{background:#1a1208;border:1px solid rgba(201,166,107,0.25);border-radius:12px;padding:16px 18px;margin:16px 0}
+  .back{display:inline-block;margin-bottom:24px;color:#a0896e;font-size:13px;text-decoration:none}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid rgba(201,166,107,0.15)}
+  th{color:#c9a66b;font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/">← Back to ScriptSchedule</a>
+  <h1>Privacy Policy</h1>
+  <div class="updated">Last updated August 4, 2026</div>
+
+  <p>ScriptSchedule is a family medication tracker built for individual and family use. This policy explains what data we collect, why, who we share it with, and what control you have over it. It's written in plain language on purpose — if anything here is unclear, contact us using the details at the bottom.</p>
+
+  <div class="callout">
+    <strong style="color:#f0e6d8">The short version:</strong> we never sell your data or use it for advertising. We only share data with the handful of service providers required to make the app work (listed below), and we keep what we send them to the minimum needed.
+  </div>
+
+  <h2>What we collect</h2>
+  <ul>
+    <li><strong>Account info:</strong> your name, email address, and password (stored encrypted — we never see or store your plaintext password).</li>
+    <li><strong>Medication data:</strong> names, doses, schedules, refill counts, and dose history (taken/skipped/snoozed) for you, your family members, and pets.</li>
+    <li><strong>Health details you choose to enter:</strong> emergency profile info (blood type, allergies, conditions, doctor contact info) and medical documents you upload (lab results, discharge summaries, doctor reports).</li>
+    <li><strong>Photos, temporarily:</strong> when you scan a prescription label, a pill, or a document, that photo is processed to extract the details — see "AI-assisted scanning" below for exactly what happens to it.</li>
+    <li><strong>Push notification identifiers:</strong> if you enable reminders, your device's push-notification subscription ID.</li>
+  </ul>
+
+  <h2>Who we share it with, and why</h2>
+  <p>We use a small number of service providers to run the app. None of them are permitted to use your data for their own purposes — they only process it to provide their specific service to us.</p>
+  <table>
+    <tr><th>Provider</th><th>What they receive</th><th>Why</th></tr>
+    <tr><td>Supabase</td><td>All account and medication data</td><td>Database hosting. Data is encrypted in transit and access-controlled so only your household can read it.</td></tr>
+    <tr><td>Netlify</td><td>App hosting; routes requests to the providers below</td><td>Hosts the app and the small server-side functions that talk to Anthropic and OneSignal on your behalf.</td></tr>
+    <tr><td>Anthropic (Claude)</td><td>Photos you choose to scan (prescription labels, pills, documents)</td><td>Reads the photo and extracts structured details (medication name, dose, lab values, etc). The photo itself is discarded after processing — only the extracted text is saved to your account.</td></tr>
+    <tr><td>OneSignal</td><td>Your push subscription ID, plus a generic reminder message (e.g. "Time for [name]'s medication") — deliberately <em>not</em> the medication name or dose</td><td>Delivers your reminder notifications. We keep medication details out of this because that content also passes through Apple's/Google's/Mozilla's notification systems on the way to your device.</td></tr>
+  </table>
+
+  <h2>AI-assisted scanning</h2>
+  <p>The bottle-scan, pill ID, and document-upload features work by sending a photo to Anthropic's Claude API, which reads it and returns the extracted details as text. That photo is sent for that single request and is not stored by us afterward — we save only the extracted text (medication name, dose, lab values, etc), not the image. You'll see a reminder of this directly on those screens before you use them.</p>
+
+  <h2>Data retention & deletion</h2>
+  <p>Your data stays in your account for as long as you use ScriptSchedule. You can:</p>
+  <ul>
+    <li>Rename or remove individual family members, medications, or documents at any time from within the app.</li>
+    <li>Delete your account and all associated household data permanently from Report → App Settings → Delete My Account. If you share a household with other members, this removes your access without deleting the household's shared data for the remaining members.</li>
+    <li>Contact us directly (below) to request deletion if you're unable to do so in-app.</li>
+  </ul>
+
+  <h2>Security</h2>
+  <p>Data is encrypted in transit (HTTPS/TLS) between your device and our servers. Access to your household's data is restricted at the database level so that only signed-in members of your household can read or write it — not other ScriptSchedule users, and not us, outside of what's needed to operate the service or respond to a support request you initiate.</p>
+
+  <h2>Children's data</h2>
+  <p>ScriptSchedule is intended to be operated by an adult managing medications for their family, which may include minor children or pets. We don't knowingly collect data directly from children; a parent or guardian is assumed to control the account and enter that information themselves.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If we change how we handle your data in a material way, we'll update this page and the "Last updated" date above.</p>
+
+  <h2>Contact</h2>
+  <p>Questions, or want to exercise any of the rights above? Email <a href="mailto:ccragsdale@gmail.com">ccragsdale@gmail.com</a>.</p>
+</div>
+</body>
+</html>
