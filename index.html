@@ -66,7 +66,7 @@ html,body{background:#1e1610;color:#f0e6d8;font-family:Georgia,'Times New Roman'
 /* LAYOUT */
 .app{max-width:480px;margin:0 auto;min-height:100vh;position:relative}
 header{background:linear-gradient(135deg,#1a1008,#2a1f14);border-bottom:1px solid #3a2e24;position:sticky;top:0;z-index:50}
-.header-inner{display:flex;align-items:center;justify-content:space-between;padding:14px 18px}
+.header-inner{display:flex;align-items:center;justify-content:space-between;padding:14px 60px 14px 18px}
 .logo-area{display:flex;align-items:center;gap:10px}
 .logo-img{width:42px;height:42px;border-radius:10px;object-fit:cover}
 .logo-text{font-size:18px;font-weight:700;letter-spacing:-0.02em;color:#f0e6d8}
@@ -102,9 +102,9 @@ header{background:linear-gradient(135deg,#1a1008,#2a1f14);border-bottom:1px soli
 /* NAV */
 nav{display:flex;background:#1a1208;overflow-x:auto;scrollbar-width:none;position:fixed;bottom:0;left:0;right:0;z-index:60;border-top:1px solid #3a2e24;box-shadow:0 -4px 24px rgba(0,0,0,.5);max-width:480px;margin:0 auto}
 nav::-webkit-scrollbar{display:none}
-.nav-btn{flex:1;min-width:56px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 4px 16px;background:transparent;border:none;color:#8a7a70;cursor:pointer;font-size:11px;font-family:Georgia,serif;white-space:nowrap}
+.nav-btn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 2px 14px;background:transparent;border:none;color:#8a7a70;cursor:pointer;font-size:10px;font-family:Georgia,serif;white-space:nowrap;overflow:hidden}
 .nav-btn.active{color:#c9a66b;border-top:2px solid #c9a66b}
-.nav-icon{font-size:20px}
+.nav-icon{font-size:18px}
 
 /* MAIN */
 main{padding:14px 14px 100px;animation:fadeIn .3s ease}
@@ -247,8 +247,17 @@ textarea.form-input{min-height:72px;resize:vertical}
 .bg-notice{background:#2a1f14;border:1px solid #3d2e1a;border-left:3px solid #c9a66b;border-radius:9px;padding:11px 13px;font-size:12px;color:#d9c7b9;line-height:1.5;margin-bottom:14px;text-align:left}
 .bg-notice b{color:#c9a66b}
 
-/* ── BETA FEEDBACK BUTTON ── */
-#fb-btn{position:fixed;bottom:78px;right:14px;width:52px;height:52px;border-radius:50%;background:#c9a66b;color:#1a1008;border:2px solid #1e1610;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;z-index:55;display:none;align-items:center;justify-content:center;font-size:22px;padding:0;transition:transform .15s ease}
+/* ── BETA FEEDBACK BUTTON ──
+   Anchored inside the sticky header's screen-space (top:0, matching where
+   the sticky <header> pins) rather than floating over scrollable <main>
+   content. A position:fixed FAB over content always eventually sits on top
+   of whatever scrolls to that screen position — no amount of bottom padding
+   fixes that, since fixed elements don't move with scroll. This was
+   confirmed covering the "Remove" button on medication cards, the adherence
+   stat, and the SOS allergies header before this fix. The header reserves
+   60px of right padding (see .header-inner) so this never overlaps the date
+   text either. */
+#fb-btn{position:fixed;top:12px;right:14px;width:40px;height:40px;border-radius:50%;background:#c9a66b;color:#1a1008;border:2px solid #1e1610;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;z-index:55;display:none;align-items:center;justify-content:center;font-size:17px;padding:0;transition:transform .15s ease}
 #fb-btn.show{display:flex}
 #fb-btn:active{transform:scale(.92)}
 .fb-badge{position:absolute;top:-4px;right:-4px;background:#1a1008;color:#c9a66b;font-size:8px;font-weight:700;letter-spacing:.08em;padding:3px 6px;border-radius:8px;text-transform:uppercase;border:1px solid #c9a66b;font-family:Georgia,serif}
@@ -2549,6 +2558,7 @@ ${toastHTML}
   </div>
 </header>
 
+${state.view==="dashboard"?`
 <div class="people-section">
   <div class="people-all-row">
     <button class="people-all-btn ${state.selectedPerson==="All"?"active":""}" data-action="selectPerson" data-person="All">⊞ All</button>
@@ -2600,7 +2610,7 @@ ${toastHTML}
     return `<div class="day-pill ${isT?"today":""}"><div class="day-name">${DAYS[d.getDay()]}</div><div class="day-num">${d.getDate()}</div></div>`;
   }).join("")}
 </div>
-
+`:""}
 <nav>
   ${[["dashboard","⊞","Home"],["meds","💊","Meds"],["scan","⬡","Scan"],["pill","🔍","ID Pill"],["docs","📁","Docs"],["emergency","🚨","SOS"],["report","📊","Report"]].map(([v,icon,label])=>`
     <button class="nav-btn ${state.view===v?"active":""}" data-action="setView" data-view="${v}">
@@ -2723,7 +2733,14 @@ ${visible.length===0?(state.meds.length===0?`<div class="empty-state"><div style
 function buildMeds(filtered) {
   const active = filtered.filter(m => !isPastCourse(m));
   const past = filtered.filter(m => isPastCourse(m));
+  // Compact person filter — the full Family/Pets management block only
+  // renders on Home now (see buildApp), so this tab needs its own lightweight
+  // way to filter by person/pet since it depends on state.selectedPerson.
   return `
+<div class="inline-picker" style="grid-template-columns:repeat(auto-fill,minmax(90px,1fr))">
+  <button class="person-btn ${state.selectedPerson==="All"?"active":""}" style="${state.selectedPerson==="All"?"background:#c9a66b;color:#1a1008;border-color:#c9a66b":""}" data-action="selectPerson" data-person="All">⊞ All</button>
+  ${getAllPeople().map(p=>`<button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span></button>`).join("")}
+</div>
 <div class="section-header"><span>All Medications</span><button class="add-btn" data-action="openAdd">+ Add New</button></div>
 ${active.length===0 && past.length===0?`<div class="empty-state"><div style="font-size:36px;margin-bottom:8px">💊</div>No medications yet.<br/><span style="font-size:14px;opacity:.8">Tap <b>+ Add New</b> or use <b>Scan</b> to get started.</span></div>`:""}
 ${active.map(m=>buildMedCard(m,false)).join("")}
