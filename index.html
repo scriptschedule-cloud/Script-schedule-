@@ -457,6 +457,8 @@ let state = {
   // UI state
   showAddPerson: false,
   newPersonName: "",
+  editingDisplayName: false,
+  displayNameInput: "",
   editMedId: null,
   form: {person:"Your Name",name:"",dose:"",frequency:"Daily",time:"08:00",notes:"",pharmacy:""},
   scanImagePreview: null,
@@ -525,6 +527,7 @@ const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 state.householdId = null;
 state.currentUserId = null;       // auth.users.id for this signed-in session, used to check caregiver assignment
 state.familyMembers = [];         // [{id, name, kind, color, caregiver_user_id}] from the family_members table
+state.householdRoster = [];       // [{user_id, display_name, role}] from household_members — lets the caregiver picker show real names for OTHER members, not just self
 state.doseEventsByMedId = {};     // { [medId]: [{id,dose_date,dose_time,status,...}] } — flat, not nested per-med, so a single Realtime event patches one entry cheaply
 let householdChannel = null;
 
@@ -535,31 +538,63 @@ function familyMemberIdForName(name) {
   return fm ? fm.id : null;
 }
 
-// Self-serve caregiver handoff: claims responsibility for a person's push
-// reminders on THIS device/account, replacing whoever had it before (there's
-// no separate "un-assign" step — the previous caregiver's status simply
-// flips to "someone else" the moment this runs, everywhere, via Realtime).
-async function assignSelfAsCaregiver(familyMemberId) {
-  const { data: { session } } = await sbClient.auth.getSession();
-  const uid = session?.user?.id;
+// Resolves a household_members.user_id to a name for the caregiver picker —
+// "Me" for the signed-in user, their stored display_name for anyone else, or
+// a generic fallback for members who joined before 0009 added display names.
+function rosterLabel(userId) {
+  if (userId === state.currentUserId) return "Me";
+  const member = (state.householdRoster || []).find(r => r.user_id === userId);
+  return (member && member.display_name) || "Household member";
+}
+
+// Lets a member set/update the name OTHER household members see for them.
+// Needed for anyone who signed up or joined before 0009 added display_name
+// (which is only written at signup/invite-join time) — without this there'd
+// be no way to backfill a name for an existing account.
+async function updateMyDisplayName(name) {
+  const trimmed = (name || "").trim();
+  if (!trimmed || !state.currentUserId || !state.householdId) return;
+  const { error } = await sbClient.from("household_members")
+    .update({ display_name: trimmed })
+    .eq("household_id", state.householdId)
+    .eq("user_id", state.currentUserId);
+  if (error) { console.warn("updateMyDisplayName failed", error); showToast("Couldn't save your name — try again.", "error"); return; }
+  const existing = (state.householdRoster || []).some(r => r.user_id === state.currentUserId);
+  state.householdRoster = existing
+    ? state.householdRoster.map(r => r.user_id === state.currentUserId ? { ...r, display_name: trimmed } : r)
+    : [...(state.householdRoster || []), { user_id: state.currentUserId, display_name: trimmed, role: null }];
+  setState({ editingDisplayName: false, displayNameInput: "" });
+  showToast(`✓ Your name is now "${trimmed}"`);
+}
+
+// Caregiver handoff: assigns responsibility for a person's push reminders to
+// ANY household member (not just the caller), replacing whoever had it
+// before — there's no separate "un-assign" step, the previous caregiver's
+// status simply flips to "someone else" the moment this runs, everywhere,
+// via Realtime.
+async function assignCaregiver(familyMemberId, targetUserId) {
   const fm = state.familyMembers.find(f => f.id === familyMemberId);
-  if (!uid || !fm) return;
+  if (!fm || !targetUserId) return;
   // Pass every existing field, not just the changed one — Postgres upsert
   // still validates NOT NULL columns (name, household_id) on the proposed
   // row even though the conflict path only updates what's provided.
   const saved = await cloudUpsert("family_members", {
     id: fm.id, household_id: state.householdId, name: fm.name, kind: fm.kind, color: fm.color,
-    caregiver_user_id: uid
+    caregiver_user_id: targetUserId
   });
   if (saved) state.familyMembers = state.familyMembers.map(f => f.id === fm.id ? saved : f);
-  state.currentUserId = uid;
-  showToast(`✓ You'll get reminders for ${fm.name}`);
+  const isMe = targetUserId === state.currentUserId;
+  showToast(isMe ? `✓ You'll get reminders for ${fm.name}` : `✓ ${rosterLabel(targetUserId)} will get reminders for ${fm.name}`);
   render();
-  // Clear any schedule the previous caregiver's device created, then
-  // reschedule fresh ones on this device now that it's the assignee.
+  // Clear any schedule the previous caregiver's device created. If the new
+  // caregiver is THIS device/account, reschedule immediately; otherwise
+  // handleFamilyMemberChange's Realtime handler does it on their device IF
+  // it's open right now, and scheduleRemoteCaregiverPush below covers the
+  // case where it isn't (using their persisted OneSignal subscription id).
   const personMeds = state.meds.filter(m => m.person === fm.name);
   for (const m of personMeds) await cancelMedPushes(m.id);
-  if (pushEnabled()) syncPushSchedule();
+  if (isMe && pushEnabled()) syncPushSchedule();
+  else if (!isMe) scheduleRemoteCaregiverPush(targetUserId, personMeds);
 }
 
 // Dose-log accessor — replaces direct med.doseLog reads so the flat
@@ -658,7 +693,7 @@ async function signUpAndCreateHousehold(name, email, password, role) {
     // can't read back a household you just created until a household_members
     // row makes you a member of it, but that row doesn't exist yet either.
     const { data: rpcData, error: householdError } = await sbClient
-      .rpc("create_household_with_owner", { p_name: (name || "My") + "'s Household", p_role: role || "parent" });
+      .rpc("create_household_with_owner", { p_name: (name || "My") + "'s Household", p_role: role || "parent", p_display_name: name || null });
 
     if (householdError) { console.warn("Household creation failed", householdError); return; }
     const householdId = Array.isArray(rpcData) ? rpcData[0]?.household_id : rpcData?.household_id;
@@ -689,7 +724,7 @@ async function redeemInviteAndJoin(name, email, password, code) {
     const user = await ensureAuthUser(email, password);
     if (!user) return null;
 
-    const { data: householdId, error } = await sbClient.rpc("redeem_household_invite", { p_code: code });
+    const { data: householdId, error } = await sbClient.rpc("redeem_household_invite", { p_code: code, p_display_name: name || null });
     if (error) { console.warn("Invite redemption failed", error); return null; }
 
     if (householdId) state.householdId = householdId;
@@ -994,13 +1029,15 @@ async function loadHouseholdDataFromSupabase() {
   }
 
   const hid = state.householdId;
-  const [fmRes, medRes, doseRes, emergRes, docRes] = await Promise.all([
+  const [fmRes, medRes, doseRes, emergRes, docRes, rosterRes] = await Promise.all([
     sbClient.from("family_members").select("*").eq("household_id", hid),
     sbClient.from("medications").select("*").eq("household_id", hid),
     sbClient.from("dose_events").select("*").eq("household_id", hid),
     sbClient.from("emergency_profiles").select("*").eq("household_id", hid),
-    sbClient.from("documents").select("*").eq("household_id", hid)
+    sbClient.from("documents").select("*").eq("household_id", hid),
+    sbClient.from("household_members").select("user_id, display_name, role, onesignal_subscription_id").eq("household_id", hid)
   ]);
+  if (rosterRes.data) state.householdRoster = rosterRes.data;
 
   if (fmRes.data) {
     state.familyMembers = fmRes.data;
@@ -1863,6 +1900,64 @@ async function requestPushPermission() {
   }
 }
 
+// Shapes a med for the schedule-push/cancel-push payload — shared by
+// syncPushSchedule (this device's own caregiver assignments) and
+// scheduleRemoteCaregiverPush (scheduling on a DIFFERENT member's behalf
+// from this device, see below).
+function toPushPayload(m) {
+  const end = courseEndDate(m);
+  return {
+    id: m.id,
+    name: m.name,
+    dose: m.dose,
+    person: m.person,
+    times: m.times,
+    frequency: m.frequency,
+    endDate: end ? end.toISOString().slice(0, 10) : null
+  };
+}
+
+// Persists this device's OneSignal subscription id to household_members so
+// OTHER devices can schedule pushes on this user's behalf via
+// scheduleRemoteCaregiverPush — e.g. right when a caregiver handoff makes
+// this user the new assignee, even before this device/app is next opened.
+async function persistPushSubscriptionId(subscriptionId) {
+  if (!subscriptionId || !state.currentUserId || !state.householdId) return;
+  const { error } = await sbClient.from("household_members")
+    .update({ onesignal_subscription_id: subscriptionId })
+    .eq("household_id", state.householdId)
+    .eq("user_id", state.currentUserId);
+  if (error) { console.warn("persistPushSubscriptionId failed", error); return; }
+  state.householdRoster = (state.householdRoster || []).map(r =>
+    r.user_id === state.currentUserId ? { ...r, onesignal_subscription_id: subscriptionId } : r
+  );
+}
+
+// Schedules pushes on behalf of a DIFFERENT household member, using their
+// persisted OneSignal subscription id. This is what lets a caregiver handoff
+// take effect even if the new caregiver's device is closed at the moment of
+// assignment — the assigner's currently-open device makes this call for
+// them, rather than only relying on their device being open (Realtime) or
+// them next opening the app (maybeResyncPushes).
+async function scheduleRemoteCaregiverPush(targetUserId, personMeds) {
+  const member = (state.householdRoster || []).find(r => r.user_id === targetUserId);
+  const subscriptionId = member && member.onesignal_subscription_id;
+  if (!subscriptionId) return; // no known device for them yet — their own next-load resync will cover it once they've enabled push
+  const scheduleableMeds = personMeds
+    .filter(m => m.frequency !== "As needed" && m.times && m.times.length > 0 && !isPastCourse(m))
+    .map(toPushPayload);
+  if (scheduleableMeds.length === 0) return;
+  try {
+    await fetch("/.netlify/functions/schedule-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscriptionId, meds: scheduleableMeds, daysAhead: 7 })
+    });
+  } catch (e) {
+    console.warn("Remote caregiver schedule-push error:", e);
+  }
+}
+
 // Sync the user's medication schedule to OneSignal scheduled pushes
 // Called when meds change (added, edited, deleted) and on app load
 async function syncPushSchedule() {
@@ -1872,6 +1967,7 @@ async function syncPushSchedule() {
     console.warn("No subscription ID — push disabled?");
     return;
   }
+  persistPushSubscriptionId(subscriptionId); // fire-and-forget, non-critical path
   // Only schedule reminders for people this device's signed-in user is the
   // assigned caregiver for — not the whole household. Each device runs this
   // same filter independently, so only the actual caregiver's phone ends up
@@ -1882,18 +1978,7 @@ async function syncPushSchedule() {
       return fm && fm.caregiver_user_id === state.currentUserId;
     })
     .filter(m => m.frequency !== "As needed" && m.times && m.times.length > 0 && !isPastCourse(m))
-    .map(m => {
-      const end = courseEndDate(m);
-      return {
-        id: m.id,
-        name: m.name,
-        dose: m.dose,
-        person: m.person,
-        times: m.times,
-        frequency: m.frequency,
-        endDate: end ? end.toISOString().slice(0, 10) : null
-      };
-    });
+    .map(toPushPayload);
 
   if (scheduleableMeds.length === 0) return;
 
@@ -2915,16 +3000,39 @@ function buildReport(filtered) {
 <div class="form-card" style="margin-top:16px">
   <div style="font-weight:700;font-size:14px;margin-bottom:4px">👨‍👩‍👧 Family & Household</div>
   <div style="font-size:12px;color:#a0896e;margin-bottom:12px">Everyone below shares the same live medication list, on any device.</div>
+  ${state.editingDisplayName ? `
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <input id="displayNameInput" value="${state.displayNameInput}" placeholder="Your name..." style="flex:1;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8"/>
+      <button data-action="saveDisplayName" style="background:#c9a66b;color:#1e1610;border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer">✓</button>
+      <button data-action="cancelEditDisplayName" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer">×</button>
+    </div>
+  ` : `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;font-size:12px;color:#a0896e">
+      <span>Your name (shown to others): <strong style="color:#d9c7b9">${((state.householdRoster||[]).find(r=>r.user_id===state.currentUserId)||{}).display_name || "Not set"}</strong></span>
+      <button data-action="showEditDisplayName" style="background:none;border:none;color:#c9a66b;font-size:12px;cursor:pointer;text-decoration:underline">Edit</button>
+    </div>
+  `}
   ${getAllPeople().map(p=>{
     const fm = state.familyMembers.find(f=>f.name===p);
     const isMe = fm && fm.caregiver_user_id===state.currentUserId;
     const status = !fm || !fm.caregiver_user_id ? "🔕 No one assigned" : isMe ? "🔔 You get reminders" : "🔔 Someone else gets reminders";
+    // Roster of everyone who could be assigned: household_members (real
+    // names via 0009's display_name) plus a defensive fallback for the
+    // current assignee/self in case the roster hasn't loaded yet.
+    const rosterIds = new Set((state.householdRoster||[]).map(r=>r.user_id));
+    const pickerIds = new Set(rosterIds);
+    if (state.currentUserId) pickerIds.add(state.currentUserId);
+    if (fm && fm.caregiver_user_id) pickerIds.add(fm.caregiver_user_id);
+    const options = [...pickerIds].map(uid=>`<option value="${uid}" ${fm&&fm.caregiver_user_id===uid?"selected":""}>${rosterLabel(uid)}</option>`).join("");
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0">
       <div style="display:flex;align-items:center;gap:8px">
         <span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px">${getInitials(p)}</span>
         <div><div style="font-size:13px">${p}</div><div style="font-size:11px;color:#a0896e">${status}</div></div>
       </div>
-      ${!isMe&&fm?`<button data-action="assignSelfCaregiver" data-fm-id="${fm.id}" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0">Notify me</button>`:""}
+      ${fm?`<select data-caregiver-select data-fm-id="${fm.id}" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:6px 8px;font-size:12px;cursor:pointer;flex-shrink:0">
+        <option value="" disabled ${!fm.caregiver_user_id?"selected":""}>Assign to...</option>
+        ${options}
+      </select>`:""}
     </div>`;
   }).join("")}
   ${state.inviteCode?`
@@ -3033,12 +3141,24 @@ function attachEvents() {
       handleImageUpload(e.target.files[0], e.target.dataset.upload);
     });
   });
+  // Caregiver assignment picker (Family & Household card)
+  document.querySelectorAll("[data-caregiver-select]").forEach(el => {
+    el.addEventListener("change", e => {
+      assignCaregiver(e.target.dataset.fmId, e.target.value);
+    });
+  });
   // Live form fields
   const np = document.getElementById("newPersonInput");
   if (np) {
     np.addEventListener("input", e => state.newPersonName = e.target.value);
     np.addEventListener("keydown", e => { if(e.key==="Enter") addPerson(); if(e.key==="Escape") setState({showAddPerson:false,newPersonName:""}); });
     np.focus();
+  }
+  const dn = document.getElementById("displayNameInput");
+  if (dn) {
+    dn.addEventListener("input", e => state.displayNameInput = e.target.value);
+    dn.addEventListener("keydown", e => { if(e.key==="Enter") updateMyDisplayName(state.displayNameInput); if(e.key==="Escape") setState({editingDisplayName:false,displayNameInput:""}); });
+    dn.focus();
   }
   const pi = document.getElementById("pillImprintInput");
   if (pi) {
@@ -3057,6 +3177,13 @@ function handleAction(e) {
     case "showAddPerson": setState({showAddPerson:true}); break;
     case "addPerson": addPerson(); break;
     case "cancelAddPerson": setState({showAddPerson:false,newPersonName:""}); break;
+    case "showEditDisplayName": {
+      const mine = (state.householdRoster||[]).find(r=>r.user_id===state.currentUserId);
+      setState({editingDisplayName:true, displayNameInput:(mine && mine.display_name) || ""});
+      break;
+    }
+    case "saveDisplayName": updateMyDisplayName(state.displayNameInput); break;
+    case "cancelEditDisplayName": setState({editingDisplayName:false, displayNameInput:""}); break;
     case "generateInvite": generateHouseholdInvite(); break;
     case "resetApp": {
       if (confirm("Reset all app data? This clears all medications, family members and settings.")) {
@@ -3089,7 +3216,6 @@ function handleAction(e) {
       break;
     }
     case "dismissPushPrompt": setState({showPushPrompt: false}); break;
-    case "assignSelfCaregiver": assignSelfAsCaregiver(el.dataset.fmId); break;
     case "setPillTab": setState({pillTab:el.dataset.tab,pillResult:null,pillError:null,pillImage:null,pillImprint:""}); break;
     case "identifyByImprint": identifyByImprint(); break;
     case "clearPill": setState({pillResult:null,pillImage:null,pillImprint:"",pillError:null}); break;
