@@ -138,12 +138,17 @@ exports.handler = async function (event, context) {
 
   for (const s of schedules) {
     try {
-      const personLabel = s.med.person && s.med.person !== "Your Name"
-        ? `${s.med.person}: `
-        : "";
-      const doseLabel = s.med.dose ? ` (${s.med.dose})` : "";
-      const title = `⏰ Time for ${s.med.name}`;
-      const message = `${personLabel}${s.med.name}${doseLabel}`;
+      // Deliberately generic: the drug name/dose never leaves our servers as
+      // push content — OneSignal, and the OS-level push relay behind it
+      // (APNs/FCM), only ever see this generic text. The full detail (name,
+      // dose) is still what's shown in the app itself once opened; it's
+      // just not exposed in transit to third parties. Person's name is kept
+      // (not the drug) since it's far less individually revealing on its
+      // own than a specific medication name.
+      const title = "⏰ Medication reminder";
+      const message = s.med.person && s.med.person !== "Your Name"
+        ? `Time for ${s.med.person}'s medication`
+        : "Time for your medication";
 
       const payload = {
         app_id: APP_ID,
@@ -151,11 +156,14 @@ exports.handler = async function (event, context) {
         contents: { en: message },
         headings: { en: title },
         send_after: s.sendAt,
-        // Custom data: lets the service worker / app know what this notification was for
+        // Custom data: lets the service worker / app know what this notification
+        // was for. Only medId + doseTime are actually read client-side
+        // (handleNotificationAction looks up the medication locally by id) —
+        // medName/person aren't needed here and are deliberately omitted so
+        // they don't travel through OneSignal at all, not even in this
+        // non-visible field.
         data: {
           medId: s.med.id,
-          medName: s.med.name,
-          person: s.med.person,
           doseTime: s.dateKey,
           type: "med_reminder"
         },
