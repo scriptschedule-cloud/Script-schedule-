@@ -69,6 +69,31 @@ exports.handler = async function (event) {
     return { statusCode: 400, headers, body: JSON.stringify({ ok: false, error: "invalid_json" }) };
   }
 
+  // TEMPORARY diagnostic path — reports shape/length of the configured key
+  // without ever exposing the secret itself, to debug a persistent "Invalid
+  // API key" error from Supabase's admin endpoint. Remove once resolved.
+  if (body.debug === true) {
+    const raw = SERVICE_ROLE_KEY;
+    const trimmed = raw.trim();
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        ok: true,
+        debug: {
+          length: raw.length,
+          trimmedLength: trimmed.length,
+          hasWhitespace: raw.length !== trimmed.length,
+          startsWithEyJ: raw.startsWith("eyJ"),
+          startsWithSbSecret: raw.startsWith("sb_secret_"),
+          prefix: raw.slice(0, 12),
+          suffix: raw.slice(-6),
+          dotCount: (raw.match(/\./g) || []).length // a JWT has exactly 2 dots
+        }
+      })
+    };
+  }
+
   const { accessToken } = body;
   if (!accessToken || typeof accessToken !== "string") {
     return { statusCode: 400, headers, body: JSON.stringify({ ok: false, error: "missing_access_token" }) };
