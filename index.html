@@ -457,6 +457,7 @@ let state = {
   // UI state
   showAddPerson: false,
   newPersonName: "",
+  newPersonKind: "person",
   editingDisplayName: false,
   displayNameInput: "",
   editingFamilyMemberId: null,
@@ -1457,18 +1458,25 @@ async function addPerson() {
   const name = state.newPersonName.trim();
   if (!name) return;
   if (state.people.includes(name)||state.pets.includes(name)) { showToast("Name already exists","error"); return; }
-  const color = EXTRA_COLORS[state.people.length % EXTRA_COLORS.length];
-  state.people.push(name);
+  // Despite the "+ Add Person or Pet" button, this used to always add to
+  // state.people and always save kind:"person" regardless of what the user
+  // meant — there was no control to actually distinguish the two.
+  const isPet = state.newPersonKind === "pet";
+  const kind = isPet ? "pet" : "person";
+  const targetList = isPet ? "pets" : "people";
+  const color = EXTRA_COLORS[(state.people.length + state.pets.length) % EXTRA_COLORS.length];
+  state[targetList].push(name);
   state.colorMap[name] = color;
   save("ss:people", state.people);
+  save("ss:pets", state.pets);
   save("ss:colors", state.colorMap);
   showToast("✓ "+name+" added");
-  setState({showAddPerson:false, newPersonName:""});
+  setState({showAddPerson:false, newPersonName:"", newPersonKind:"person"});
 
   // Default the new person's caregiver to whoever added them — makes
   // reminders work immediately without a separate setup step, and is
   // reassignable any time via the "Notify me" toggle.
-  const saved = await cloudUpsert("family_members", { household_id: state.householdId, name, kind: "person", color, caregiver_user_id: state.currentUserId });
+  const saved = await cloudUpsert("family_members", { household_id: state.householdId, name, kind, color, caregiver_user_id: state.currentUserId });
   if (saved) state.familyMembers = [...state.familyMembers.filter(f=>f.name!==name), saved];
 }
 function removePerson(name) {
@@ -2534,10 +2542,16 @@ ${toastHTML}
   <div class="people-group-label" style="margin-top:10px">Add</div>
   <div class="people-grid">
     ${state.showAddPerson ? `
-      <div class="add-person-input" style="grid-column:span 3">
-        <input class="person-name-input" id="newPersonInput" value="${state.newPersonName}" placeholder="Name..." />
-        <button class="confirm-btn" data-action="addPerson">✓</button>
-        <button class="cancel-btn" data-action="cancelAddPerson">×</button>
+      <div class="add-person-input" style="grid-column:span 3;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:6px;width:100%">
+          <button data-action="setNewPersonKind" data-kind="person" style="flex:1;padding:8px;border-radius:8px;font-size:13px;cursor:pointer;background:${state.newPersonKind!=="pet"?"#c9a66b":"#2a1f14"};color:${state.newPersonKind!=="pet"?"#1a1008":"#c9a66b"};border:1px solid ${state.newPersonKind!=="pet"?"#c9a66b":"rgba(201,166,107,0.3)"}">👤 Person</button>
+          <button data-action="setNewPersonKind" data-kind="pet" style="flex:1;padding:8px;border-radius:8px;font-size:13px;cursor:pointer;background:${state.newPersonKind==="pet"?"#c9a66b":"#2a1f14"};color:${state.newPersonKind==="pet"?"#1a1008":"#c9a66b"};border:1px solid ${state.newPersonKind==="pet"?"#c9a66b":"rgba(201,166,107,0.3)"}">🐾 Pet</button>
+        </div>
+        <div style="display:flex;gap:6px;width:100%">
+          <input class="person-name-input" id="newPersonInput" value="${state.newPersonName}" placeholder="Name..." style="flex:1"/>
+          <button class="confirm-btn" data-action="addPerson">✓</button>
+          <button class="cancel-btn" data-action="cancelAddPerson">×</button>
+        </div>
       </div>` : `<button class="add-person-btn" data-action="showAddPerson" style="grid-column:span 3">+ Add Person or Pet</button>`}
   </div>
 </div>
@@ -3281,7 +3295,7 @@ function attachEvents() {
   const np = document.getElementById("newPersonInput");
   if (np) {
     np.addEventListener("input", e => state.newPersonName = e.target.value);
-    np.addEventListener("keydown", e => { if(e.key==="Enter") addPerson(); if(e.key==="Escape") setState({showAddPerson:false,newPersonName:""}); });
+    np.addEventListener("keydown", e => { if(e.key==="Enter") addPerson(); if(e.key==="Escape") setState({showAddPerson:false,newPersonName:"",newPersonKind:"person"}); });
     np.focus();
   }
   const dn = document.getElementById("displayNameInput");
@@ -3317,9 +3331,10 @@ function handleAction(e) {
     case "setView": setState({view:el.dataset.view, docViewing:null}); break;
     case "selectPerson": setState({selectedPerson:el.dataset.person}); break;
     case "removePerson": removePerson(el.dataset.person); break;
-    case "showAddPerson": setState({showAddPerson:true}); break;
+    case "showAddPerson": setState({showAddPerson:true, newPersonKind:"person"}); break;
+    case "setNewPersonKind": setState({newPersonKind: el.dataset.kind}); break;
     case "addPerson": addPerson(); break;
-    case "cancelAddPerson": setState({showAddPerson:false,newPersonName:""}); break;
+    case "cancelAddPerson": setState({showAddPerson:false,newPersonName:"",newPersonKind:"person"}); break;
     case "showEditDisplayName": {
       const mine = (state.householdRoster||[]).find(r=>r.user_id===state.currentUserId);
       setState({editingDisplayName:true, displayNameInput:(mine && mine.display_name) || ""});
