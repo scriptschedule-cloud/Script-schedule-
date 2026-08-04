@@ -459,6 +459,8 @@ let state = {
   newPersonName: "",
   editingDisplayName: false,
   displayNameInput: "",
+  editingFamilyMemberId: null,
+  familyMemberNameInput: "",
   editMedId: null,
   form: {person:"Your Name",name:"",dose:"",frequency:"Daily",time:"08:00",notes:"",pharmacy:""},
   scanImagePreview: null,
@@ -1189,6 +1191,32 @@ function handleDoseEventChange(payload) {
   scheduleRender();
 }
 
+// Propagates a family member rename to every place their name is used as a
+// join key — medications/emergency_profiles/documents keep the name as a
+// plain string column rather than a foreign key (see family_members' schema
+// comment), so renaming means rewriting it in each of those, not just the
+// family_members row itself. Shared by renamePersonInline's optimistic local
+// update and handleFamilyMemberChange's Realtime UPDATE handler, so a rename
+// made HERE and one that arrives from another device apply identically.
+function applyFamilyMemberRename(oldName, newName, newColor) {
+  if (!oldName || oldName === newName) return;
+  const swap = arr => [...new Set(arr.map(p => p === oldName ? newName : p))];
+  state.people = swap(state.people);
+  state.pets = swap(state.pets);
+  const { [oldName]: oldColor, ...restColors } = state.colorMap;
+  state.colorMap = { ...restColors, [newName]: newColor || oldColor };
+  state.meds = state.meds.map(m => m.person === oldName ? { ...m, person: newName } : m);
+  save("ss:meds", state.meds);
+  if (state.emergencyProfiles[oldName]) {
+    const { [oldName]: profile, ...restProfiles } = state.emergencyProfiles;
+    state.emergencyProfiles = { ...restProfiles, [newName]: { ...profile, person: newName } };
+    save("ss:emergency", state.emergencyProfiles);
+  }
+  state.docs = state.docs.map(d => d.person === oldName ? { ...d, person: newName } : d);
+  save("ss:docs", state.docs);
+  if (state.selectedPerson === oldName) state.selectedPerson = newName;
+}
+
 function handleFamilyMemberChange(payload) {
   if (payload.eventType === "DELETE") {
     const id = payload.old.id;
@@ -1202,6 +1230,7 @@ function handleFamilyMemberChange(payload) {
   } else {
     const row = payload.new;
     const existing = state.familyMembers.find(f => f.id === row.id);
+    if (existing && existing.name !== row.name) applyFamilyMemberRename(existing.name, row.name, row.color);
     state.familyMembers = existing ? state.familyMembers.map(f => f.id === row.id ? row : f) : [...state.familyMembers, row];
     const targetList = row.kind === "pet" ? "pets" : "people";
     if (!state[targetList].includes(row.name)) state[targetList] = [...state[targetList], row.name];
@@ -1455,6 +1484,25 @@ function removePerson(name) {
   // ON DELETE CASCADE; other devices pick up the cleanup via Realtime DELETE
   // events (see plan's "orphaned data" note — resolved for free here).
   if (fm) cloudDelete("family_members", fm.id);
+}
+// Renames a family member via the rename_family_member RPC (existed in the
+// schema since 0001 but had no UI hookup — the only way to fix a typo was
+// deleting and re-adding, which orphans that person's medication history).
+// The RPC cascades medications/emergency_profiles/documents.person
+// server-side; applyFamilyMemberRename mirrors that locally so this device
+// doesn't have to wait for the Realtime round-trip to see it reflected.
+async function renamePersonInline(familyMemberId, newNameRaw) {
+  const newName = (newNameRaw || "").trim();
+  const fm = state.familyMembers.find(f => f.id === familyMemberId);
+  if (!fm || !newName || newName === fm.name) { setState({editingFamilyMemberId:null, familyMemberNameInput:""}); return; }
+  if (state.people.includes(newName) || state.pets.includes(newName)) { showToast("Name already exists","error"); return; }
+  const { error } = await sbClient.rpc("rename_family_member", { p_family_member_id: fm.id, p_new_name: newName });
+  if (error) { console.warn("rename_family_member failed", error); showToast("Couldn't rename — try again.", "error"); return; }
+  const oldName = fm.name;
+  applyFamilyMemberRename(oldName, newName, fm.color);
+  state.familyMembers = state.familyMembers.map(f => f.id === fm.id ? { ...f, name: newName } : f);
+  setState({editingFamilyMemberId:null, familyMemberNameInput:""});
+  showToast(`✓ Renamed to ${newName}`);
 }
 function addFromScan() {
   if (!state.scanResult) return;
@@ -3024,10 +3072,19 @@ function buildReport(filtered) {
     if (state.currentUserId) pickerIds.add(state.currentUserId);
     if (fm && fm.caregiver_user_id) pickerIds.add(fm.caregiver_user_id);
     const options = [...pickerIds].map(uid=>`<option value="${uid}" ${fm&&fm.caregiver_user_id===uid?"selected":""}>${rosterLabel(uid)}</option>`).join("");
+    const isEditingName = fm && state.editingFamilyMemberId === fm.id;
+    if (isEditingName) {
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0">
+        <span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px;flex-shrink:0">${getInitials(p)}</span>
+        <input id="familyMemberNameInput" value="${state.familyMemberNameInput}" style="flex:1;min-width:0;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 8px;font-size:13px;color:#f0e6d8"/>
+        <button data-action="saveFamilyMemberName" data-fm-id="${fm.id}" style="background:#c9a66b;color:#1e1610;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0">✓</button>
+        <button data-action="cancelEditFamilyMemberName" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0">×</button>
+      </div>`;
+    }
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0">
       <div style="display:flex;align-items:center;gap:8px">
         <span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px">${getInitials(p)}</span>
-        <div><div style="font-size:13px">${p}</div><div style="font-size:11px;color:#a0896e">${status}</div></div>
+        <div><div style="font-size:13px">${p} ${fm?`<button data-action="showEditFamilyMemberName" data-fm-id="${fm.id}" title="Rename" style="background:none;border:none;color:#a0896e;font-size:11px;cursor:pointer;padding:0">✎</button>`:""}</div><div style="font-size:11px;color:#a0896e">${status}</div></div>
       </div>
       ${fm?`<select data-caregiver-select data-fm-id="${fm.id}" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:6px 8px;font-size:12px;cursor:pointer;flex-shrink:0">
         <option value="" disabled ${!fm.caregiver_user_id?"selected":""}>Assign to...</option>
@@ -3160,6 +3217,12 @@ function attachEvents() {
     dn.addEventListener("keydown", e => { if(e.key==="Enter") updateMyDisplayName(state.displayNameInput); if(e.key==="Escape") setState({editingDisplayName:false,displayNameInput:""}); });
     dn.focus();
   }
+  const fn = document.getElementById("familyMemberNameInput");
+  if (fn) {
+    fn.addEventListener("input", e => state.familyMemberNameInput = e.target.value);
+    fn.addEventListener("keydown", e => { if(e.key==="Enter") renamePersonInline(state.editingFamilyMemberId, state.familyMemberNameInput); if(e.key==="Escape") setState({editingFamilyMemberId:null,familyMemberNameInput:""}); });
+    fn.focus();
+  }
   const pi = document.getElementById("pillImprintInput");
   if (pi) {
     pi.addEventListener("input", e => { state.pillImprint = e.target.value.toUpperCase(); pi.value = state.pillImprint; });
@@ -3184,6 +3247,13 @@ function handleAction(e) {
     }
     case "saveDisplayName": updateMyDisplayName(state.displayNameInput); break;
     case "cancelEditDisplayName": setState({editingDisplayName:false, displayNameInput:""}); break;
+    case "showEditFamilyMemberName": {
+      const fm = state.familyMembers.find(f=>f.id===el.dataset.fmId);
+      setState({editingFamilyMemberId: el.dataset.fmId, familyMemberNameInput: (fm && fm.name) || ""});
+      break;
+    }
+    case "saveFamilyMemberName": renamePersonInline(el.dataset.fmId, state.familyMemberNameInput); break;
+    case "cancelEditFamilyMemberName": setState({editingFamilyMemberId:null, familyMemberNameInput:""}); break;
     case "generateInvite": generateHouseholdInvite(); break;
     case "resetApp": {
       if (confirm("Reset all app data? This clears all medications, family members and settings.")) {
