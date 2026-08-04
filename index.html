@@ -486,7 +486,8 @@ let state = {
   snoozeTimers: {},         // { doseKey: setTimeout handle }
   showPushPrompt: false,    // whether to show the "Enable reminders?" modal
   inviteCode: null,         // generated household_invites.code, shown after "Invite a family member"
-  inviteGenerating: false
+  inviteGenerating: false,
+  dashboardFilter: null     // "taken" | "pending" | "all" | null — which stat tile is expanded on the dashboard
 };
 
 // ── STORAGE ──────────────────────────────────────────────────────────────────
@@ -522,7 +523,8 @@ const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // householdId lives only in memory (the old ss:household_id localStorage key
 // was write-only and never read back, so there's nothing to migrate from).
 state.householdId = null;
-state.familyMembers = [];         // [{id, name, kind, color}] from the family_members table
+state.currentUserId = null;       // auth.users.id for this signed-in session, used to check caregiver assignment
+state.familyMembers = [];         // [{id, name, kind, color, caregiver_user_id}] from the family_members table
 state.doseEventsByMedId = {};     // { [medId]: [{id,dose_date,dose_time,status,...}] } — flat, not nested per-med, so a single Realtime event patches one entry cheaply
 let householdChannel = null;
 
@@ -531,6 +533,33 @@ let householdChannel = null;
 function familyMemberIdForName(name) {
   const fm = state.familyMembers.find(f => f.name === name);
   return fm ? fm.id : null;
+}
+
+// Self-serve caregiver handoff: claims responsibility for a person's push
+// reminders on THIS device/account, replacing whoever had it before (there's
+// no separate "un-assign" step — the previous caregiver's status simply
+// flips to "someone else" the moment this runs, everywhere, via Realtime).
+async function assignSelfAsCaregiver(familyMemberId) {
+  const { data: { session } } = await sbClient.auth.getSession();
+  const uid = session?.user?.id;
+  const fm = state.familyMembers.find(f => f.id === familyMemberId);
+  if (!uid || !fm) return;
+  // Pass every existing field, not just the changed one — Postgres upsert
+  // still validates NOT NULL columns (name, household_id) on the proposed
+  // row even though the conflict path only updates what's provided.
+  const saved = await cloudUpsert("family_members", {
+    id: fm.id, household_id: state.householdId, name: fm.name, kind: fm.kind, color: fm.color,
+    caregiver_user_id: uid
+  });
+  if (saved) state.familyMembers = state.familyMembers.map(f => f.id === fm.id ? saved : f);
+  state.currentUserId = uid;
+  showToast(`✓ You'll get reminders for ${fm.name}`);
+  render();
+  // Clear any schedule the previous caregiver's device created, then
+  // reschedule fresh ones on this device now that it's the assignee.
+  const personMeds = state.meds.filter(m => m.person === fm.name);
+  for (const m of personMeds) await cancelMedPushes(m.id);
+  if (pushEnabled()) syncPushSchedule();
 }
 
 // Dose-log accessor — replaces direct med.doseLog reads so the flat
@@ -641,8 +670,8 @@ async function signUpAndCreateHousehold(name, email, password, role) {
     // normal insert now — the membership row above already exists, so
     // is_household_member() finds it and the read-back succeeds.
     const seedRows = [
-      ...DEFAULT_PEOPLE.map(n => ({ household_id: householdId, name: n, kind: "person", color: BASE_COLORS[n] || null })),
-      ...DEFAULT_PETS.map(n => ({ household_id: householdId, name: n, kind: "pet", color: BASE_COLORS[n] || null }))
+      ...DEFAULT_PEOPLE.map(n => ({ household_id: householdId, name: n, kind: "person", color: BASE_COLORS[n] || null, caregiver_user_id: user.id })),
+      ...DEFAULT_PETS.map(n => ({ household_id: householdId, name: n, kind: "pet", color: BASE_COLORS[n] || null, caregiver_user_id: user.id }))
     ];
     const { data: seeded, error: seedError } = await sbClient.from("family_members").insert(seedRows).select();
     if (seedError) console.warn("Family member seeding failed", seedError);
@@ -952,6 +981,7 @@ function realInit() {
 async function loadHouseholdDataFromSupabase() {
   const { data: { session } } = await sbClient.auth.getSession();
   if (!session) return;
+  state.currentUserId = session.user.id;
 
   if (!state.householdId) {
     const { data: membership, error: memErr } = await sbClient
@@ -1139,6 +1169,10 @@ function handleFamilyMemberChange(payload) {
     const targetList = row.kind === "pet" ? "pets" : "people";
     if (!state[targetList].includes(row.name)) state[targetList] = [...state[targetList], row.name];
     if (row.color) state.colorMap = { ...state.colorMap, [row.name]: row.color };
+    // If this device's user was JUST assigned caregiver (possibly from
+    // someone else's device), pick up the handoff immediately rather than
+    // waiting for the next scheduled resync.
+    if (row.caregiver_user_id === state.currentUserId && pushEnabled()) syncPushSchedule();
   }
   save("ss:people", state.people);
   save("ss:pets", state.pets);
@@ -1239,7 +1273,10 @@ async function submitFeedback() {
 
 // ── ACTIONS ──────────────────────────────────────────────────────────────────
 function takeMed(id) {
-  const med = state.meds.find(m => m.id === id);
+  // String() guards against medications created before the cloud migration,
+  // which can still have a legacy numeric id (Date.now()) instead of a uuid
+  // string — a strict === between the two types silently never matches.
+  const med = state.meds.find(m => String(m.id) === String(id));
   if (med) {
     // Find the most relevant dose time (closest pending one for today)
     const times = (med.times && med.times.length) ? med.times : (med.time ? [med.time] : ["08:00"]);
@@ -1264,7 +1301,7 @@ function takeMed(id) {
   showToast("✓ Medication marked as taken");
 }
 function deleteMed(id) {
-  state.meds = state.meds.filter(m=>m.id!==id);
+  state.meds = state.meds.filter(m=>String(m.id)!==String(id));
   save("ss:meds", state.meds);
   showToast("Medication removed","info");
   render();
@@ -1273,7 +1310,10 @@ function deleteMed(id) {
 }
 function openAdd() {
   state.editMedId = null;
-  state.form = {person:state.selectedPerson==="All"?"Your Name":state.selectedPerson,name:"",dose:"",frequency:"Daily",times:["08:00"],startDate:todayStr(),durationDays:"",refillsRemaining:"",notes:"",pharmacy:""};
+  // Leave person blank when viewing "All" rather than silently defaulting
+  // to "Your Name" — forces a deliberate choice so a medication never ends
+  // up assigned to the wrong family member by accident.
+  state.form = {person:state.selectedPerson==="All"?"":state.selectedPerson,name:"",dose:"",frequency:"Daily",times:["08:00"],startDate:todayStr(),durationDays:"",refillsRemaining:"",notes:"",pharmacy:""};
   setState({view:"add"});
 }
 function openEdit(med) {
@@ -1313,6 +1353,7 @@ function medRowForCloud(form, id) {
 }
 
 async function submitForm() {
+  if (!state.form.person) { showToast("Please choose who this medication is for","error"); return; }
   if (!state.form.name||!state.form.dose) { showToast("Name and dose required","error"); return; }
   const isEdit = !!state.editMedId;
   let editedId = state.editMedId;
@@ -1323,7 +1364,7 @@ async function submitForm() {
   const fresh = saved ? rowToMed(saved) : { id: editedId || (Date.now()+""), ...state.form, times: draft.times, nextDue: draft.next_due };
 
   if (isEdit) {
-    state.meds = state.meds.map(m=>m.id===editedId?{...m,...fresh}:m);
+    state.meds = state.meds.map(m=>String(m.id)===String(editedId)?{...m,...fresh}:m);
     showToast("✓ Medication updated");
   } else {
     state.meds.push(fresh);
@@ -1355,7 +1396,10 @@ async function addPerson() {
   showToast("✓ "+name+" added");
   setState({showAddPerson:false, newPersonName:""});
 
-  const saved = await cloudUpsert("family_members", { household_id: state.householdId, name, kind: "person", color });
+  // Default the new person's caregiver to whoever added them — makes
+  // reminders work immediately without a separate setup step, and is
+  // reassignable any time via the "Notify me" toggle.
+  const saved = await cloudUpsert("family_members", { household_id: state.householdId, name, kind: "person", color, caregiver_user_id: state.currentUserId });
   if (saved) state.familyMembers = [...state.familyMembers.filter(f=>f.name!==name), saved];
 }
 function removePerson(name) {
@@ -1378,7 +1422,7 @@ function removePerson(name) {
 function addFromScan() {
   if (!state.scanResult) return;
   const r = state.scanResult;
-  const person = state.selectedPerson==="All"?"Your Name":state.selectedPerson;
+  const person = state.selectedPerson==="All"?"":state.selectedPerson;
   // Route to confirmation screen instead of immediately saving
   state.scheduleConfirm = {
     person,
@@ -1411,16 +1455,19 @@ async function confirmScheduleSave() {
   const freqEl = document.getElementById("cs-freq");
   const foodEl = document.getElementById("cs-food");
   const refillsEl = document.getElementById("cs-refills");
+  const personEl = document.getElementById("cs-person");
   if (nameEl) c.name = nameEl.value.trim();
   if (doseEl) c.dose = doseEl.value.trim();
   if (freqEl) c.frequency = freqEl.value;
   if (foodEl) c.withFood = foodEl.checked;
   if (refillsEl) c.refillsRemaining = refillsEl.value ? parseInt(refillsEl.value, 10) : null;
+  if (personEl) c.person = personEl.value;
   // Read time inputs
   const timeInputs = document.querySelectorAll("[data-time-idx]");
   if (timeInputs.length) {
     c.times = Array.from(timeInputs).map(el => el.value).filter(Boolean);
   }
+  if (!c.person) { showToast("Please choose who this medication is for","error"); return; }
   if (!c.name || !c.dose) { showToast("Name and dose required","error"); return; }
   if (!c.times.length && c.frequency !== "As needed") { showToast("Add at least one time","error"); return; }
 
@@ -1825,8 +1872,15 @@ async function syncPushSchedule() {
     console.warn("No subscription ID — push disabled?");
     return;
   }
-  // Filter meds that have actual schedules (skip "as needed" and completed courses)
+  // Only schedule reminders for people this device's signed-in user is the
+  // assigned caregiver for — not the whole household. Each device runs this
+  // same filter independently, so only the actual caregiver's phone ends up
+  // with a scheduled push for a given person's meds.
   const scheduleableMeds = state.meds
+    .filter(m => {
+      const fm = state.familyMembers.find(f => f.name === m.person);
+      return fm && fm.caregiver_user_id === state.currentUserId;
+    })
     .filter(m => m.frequency !== "As needed" && m.times && m.times.length > 0 && !isPastCourse(m))
     .map(m => {
       const end = courseEndDate(m);
@@ -1857,8 +1911,6 @@ async function syncPushSchedule() {
     if (!data.ok && data.error) {
       console.warn("Schedule push warning:", data);
     }
-    // Track last sync time so we don't re-sync constantly
-    try { localStorage.setItem("ss:last_push_sync", String(Date.now())); } catch(e) {}
   } catch (e) {
     console.warn("Schedule push fetch error:", e);
   }
@@ -1879,14 +1931,14 @@ async function cancelMedPushes(medId) {
 }
 
 // Re-sync schedule periodically (push schedule needs refresh as it ages)
+// Resyncs on every app load rather than throttling to once/day — a
+// caregiver handoff made while this device was closed should take effect
+// the next time it opens, not wait up to 24h. schedule-push.js's scheduling
+// is idempotent per (medication_id, dose_date, dose_time), so calling this
+// more often is safe.
 function maybeResyncPushes() {
   if (!pushEnabled()) return;
-  let lastSync = 0;
-  try { lastSync = parseInt(localStorage.getItem("ss:last_push_sync") || "0", 10); } catch(e) {}
-  const oneDay = 24 * 60 * 60 * 1000;
-  if (Date.now() - lastSync > oneDay) {
-    syncPushSchedule();
-  }
+  syncPushSchedule();
 }
 
 // Handle action buttons clicked from push notifications.
@@ -2398,20 +2450,36 @@ function buildView(filtered, taken, pending, pct, weekDays) {
 }
 
 function buildDashboard(filtered, taken, pending, pct) {
-  const upcoming = filtered.filter(m=>!isTakenToday(m)).slice(0,3);
+  const activeFilter = state.dashboardFilter;
+  const tile = (key, count, label, color, extraStyle) => `
+    <div class="stat-card ${activeFilter===key?"active-filter":""}" data-action="setDashboardFilter" data-filter="${key}" style="border-color:${color};cursor:pointer${activeFilter===key?";box-shadow:0 0 0 2px "+color+" inset":""}">
+      <div class="stat-num" style="${extraStyle||""}">${count}</div><div class="stat-label">${label}</div>
+    </div>`;
+
+  // Which meds to list below the stat row depends on the selected filter —
+  // defaults to the same "upcoming" (pending) view as before when nothing
+  // is selected, but tapping a tile expands the full list behind that count.
+  let sectionTitle = "Upcoming Doses";
+  let sectionMeds = filtered.filter(m=>!isTakenToday(m));
+  let capped = true;
+  if (activeFilter === "taken") { sectionTitle = "Taken Today"; sectionMeds = filtered.filter(m=>isTakenToday(m)); capped = false; }
+  else if (activeFilter === "pending") { sectionTitle = "Pending"; sectionMeds = filtered.filter(m=>!isTakenToday(m)); capped = false; }
+  else if (activeFilter === "all") { sectionTitle = "All Medications"; sectionMeds = state.meds.slice(); capped = false; }
+  const visible = capped ? sectionMeds.slice(0,3) : sectionMeds;
+
   return `
 <div class="stat-row">
-  <div class="stat-card" style="border-color:#c9a66b"><div class="stat-num">${taken}</div><div class="stat-label">Taken Today</div></div>
-  <div class="stat-card" style="border-color:#8a4b3a"><div class="stat-num" style="color:${pending>0?"#e8a090":"#8c9e7a"}">${pending}</div><div class="stat-label">Pending</div></div>
-  <div class="stat-card" style="border-color:#6b8fad"><div class="stat-num">${state.meds.length}</div><div class="stat-label">Total Rx</div></div>
+  ${tile("taken", taken, "Taken Today", "#c9a66b")}
+  ${tile("pending", pending, "Pending", "#8a4b3a", `color:${pending>0?"#e8a090":"#8c9e7a"}`)}
+  ${tile("all", state.meds.length, "Total Rx", "#6b8fad")}
 </div>
 <div class="progress-card">
   <div class="progress-label"><span>Daily Progress</span><span style="color:#c9a66b;font-weight:700">${taken}/${filtered.length}</span></div>
   <div class="progress-track"><div class="progress-fill" style="width:${filtered.length?pct:0}%"></div></div>
 </div>
-<div class="section-header"><span>Upcoming Doses</span><button class="add-btn" data-action="openAdd">+ Add</button></div>
-${upcoming.map(m=>buildMedCard(m,true)).join("")}
-${upcoming.length===0?(state.meds.length===0?`<div class="empty-state"><div style="font-size:36px;margin-bottom:8px">💊</div>No medications yet.<br/><span style="font-size:14px;opacity:.8">Tap <b>+ Add</b> above or use <b>Scan</b> to get started.</span></div>`:`<div class="empty-state">🎉 All caught up for today!</div>`):""}`;
+<div class="section-header"><span>${sectionTitle}</span>${activeFilter?`<button class="add-btn" data-action="setDashboardFilter" data-filter="${activeFilter}">✕ Close</button>`:`<button class="add-btn" data-action="openAdd">+ Add</button>`}</div>
+${visible.map(m=>buildMedCard(m,true)).join("")}
+${visible.length===0?(state.meds.length===0?`<div class="empty-state"><div style="font-size:36px;margin-bottom:8px">💊</div>No medications yet.<br/><span style="font-size:14px;opacity:.8">Tap <b>+ Add</b> above or use <b>Scan</b> to get started.</span></div>`:(activeFilter?`<div class="empty-state">Nothing here.</div>`:`<div class="empty-state">🎉 All caught up for today!</div>`)):""}`;
 }
 
 function buildMeds(filtered) {
@@ -2462,8 +2530,9 @@ function buildAdd() {
 </div>
 <div class="form-card">
   <div class="form-grid">
-    <label class="form-label">Person
+    <label class="form-label">Person *
       <select class="form-input" id="f-person">
+        ${!f.person?`<option value="" disabled selected>Choose a person or pet...</option>`:""}
         ${getAllPeople().map(p=>`<option ${f.person===p?"selected":""}>${p}</option>`).join("")}
       </select>
     </label>
@@ -2564,8 +2633,11 @@ function buildConfirmSchedule() {
     <input class="form-input" id="cs-dose" value="${(c.dose||"").replace(/"/g,"&quot;")}"/>
   </label>
 
-  <label class="form-label">For
-    <input class="form-input" value="${c.person}" disabled style="opacity:.7"/>
+  <label class="form-label">For *
+    <select class="form-input" id="cs-person">
+      ${!c.person?`<option value="" disabled selected>Choose a person or pet...</option>`:""}
+      ${getAllPeople().map(p=>`<option ${c.person===p?"selected":""}>${p}</option>`).join("")}
+    </select>
   </label>
 
   <label class="form-label">Frequency${fieldHint("schedule")}
@@ -2843,7 +2915,18 @@ function buildReport(filtered) {
 <div class="form-card" style="margin-top:16px">
   <div style="font-weight:700;font-size:14px;margin-bottom:4px">👨‍👩‍👧 Family & Household</div>
   <div style="font-size:12px;color:#a0896e;margin-bottom:12px">Everyone below shares the same live medication list, on any device.</div>
-  ${getAllPeople().map(p=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0"><span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px">${getInitials(p)}</span><span style="font-size:13px">${p}</span></div>`).join("")}
+  ${getAllPeople().map(p=>{
+    const fm = state.familyMembers.find(f=>f.name===p);
+    const isMe = fm && fm.caregiver_user_id===state.currentUserId;
+    const status = !fm || !fm.caregiver_user_id ? "🔕 No one assigned" : isMe ? "🔔 You get reminders" : "🔔 Someone else gets reminders";
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px">${getInitials(p)}</span>
+        <div><div style="font-size:13px">${p}</div><div style="font-size:11px;color:#a0896e">${status}</div></div>
+      </div>
+      ${!isMe&&fm?`<button data-action="assignSelfCaregiver" data-fm-id="${fm.id}" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0">Notify me</button>`:""}
+    </div>`;
+  }).join("")}
   ${state.inviteCode?`
     <div style="margin-top:12px;padding:12px;background:#1e1610;border-radius:10px;border:1px solid rgba(201,166,107,0.25);text-align:center">
       <div style="font-size:11px;color:#a0896e;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Share this code</div>
@@ -2984,8 +3067,9 @@ function handleAction(e) {
       break;
     }
     case "openAdd": openAdd(); break;
+    case "setDashboardFilter": setState({dashboardFilter: state.dashboardFilter===el.dataset.filter?null:el.dataset.filter}); break;
     case "takeMed": takeMed(el.dataset.id); break;
-    case "editMed": openEdit(state.meds.find(m=>m.id===el.dataset.id)); break;
+    case "editMed": openEdit(state.meds.find(m=>String(m.id)===String(el.dataset.id))); break;
     case "deleteMed": deleteMed(el.dataset.id); break;
     case "submitForm": readFormAndSubmit(); break;
     case "addFromScan": addFromScan(); break;
@@ -3005,21 +3089,22 @@ function handleAction(e) {
       break;
     }
     case "dismissPushPrompt": setState({showPushPrompt: false}); break;
+    case "assignSelfCaregiver": assignSelfAsCaregiver(el.dataset.fmId); break;
     case "setPillTab": setState({pillTab:el.dataset.tab,pillResult:null,pillError:null,pillImage:null,pillImprint:""}); break;
     case "identifyByImprint": identifyByImprint(); break;
     case "clearPill": setState({pillResult:null,pillImage:null,pillImprint:"",pillError:null}); break;
     case "addPillToMeds": {
       const r=state.pillResult;
-      state.form={person:state.selectedPerson==="All"?"Your Name":state.selectedPerson,name:r.name+(r.strength?" "+r.strength:""),dose:r.strength||"",frequency:"Daily",times:["08:00"],startDate:todayStr(),durationDays:"",refillsRemaining:"",notes:`Identified via pill lookup. ${r.usedFor}`,pharmacy:""};
+      state.form={person:state.selectedPerson==="All"?"":state.selectedPerson,name:r.name+(r.strength?" "+r.strength:""),dose:r.strength||"",frequency:"Daily",times:["08:00"],startDate:todayStr(),durationDays:"",refillsRemaining:"",notes:`Identified via pill lookup. ${r.usedFor}`,pharmacy:""};
       setState({view:"add",editMedId:null});
       break;
     }
     case "setDocsPerson": setState({docsPerson:el.dataset.person,docViewing:null}); break;
-    case "viewDoc": setState({docViewing:state.docs.find(d=>d.id===el.dataset.id)}); break;
+    case "viewDoc": setState({docViewing:state.docs.find(d=>String(d.id)===String(el.dataset.id))}); break;
     case "clearDocViewing": setState({docViewing:null}); break;
     case "deleteDoc": {
       const removedDocId = el.dataset.id;
-      state.docs=state.docs.filter(d=>d.id!==removedDocId);
+      state.docs=state.docs.filter(d=>String(d.id)!==String(removedDocId));
       save("ss:docs",state.docs);
       cloudDelete("documents", removedDocId);
       showToast("Document removed","info");

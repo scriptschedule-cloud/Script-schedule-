@@ -25,6 +25,7 @@ create table family_members (
   name text not null,
   kind text not null default 'person' check (kind in ('person','pet')),
   color text,
+  caregiver_user_id uuid references auth.users(id), -- who gets push reminders for this person (see 0008)
   created_at timestamptz not null default now(),
   unique (household_id, name)
 );
