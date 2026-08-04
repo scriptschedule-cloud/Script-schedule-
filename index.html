@@ -368,11 +368,12 @@ textarea.form-input{min-height:72px;resize:vertical}
     <div id="bg-step-code">
       <div class="bg-title">Welcome to the Beta</div>
       <div class="bg-sub">ScriptSchedule</div>
-      <div class="bg-text">You're one of the first to try it. Enter your beta access code to get started.</div>
+      <div class="bg-text">You're one of the first to try it. Enter the beta access code to get started — this is the same code for everyone testing the beta, not specific to your family.</div>
       <input type="text" id="bg-code" class="bg-input" placeholder="Beta access code" autocomplete="off" autocapitalize="none"/>
       <button class="bg-btn" id="bg-code-btn">Continue</button>
       <div class="bg-error" id="bg-code-error"></div>
       <div class="bg-footer">Don't have a code? Reach out to Cynthia.</div>
+      <div class="bg-footer" style="opacity:.75">(Joining a family member's household? You'll still need this beta code first — their invite code comes on the next screen.)</div>
       <div class="bg-footer"><a href="#" id="bg-signin-toggle">Already have an account? Sign in</a></div>
       <div id="bg-signin-panel" style="display:none;margin-top:14px">
         <input type="email" id="bg-signin-email" class="bg-input" placeholder="Email address" autocomplete="email"/>
@@ -390,7 +391,8 @@ textarea.form-input{min-height:72px;resize:vertical}
       <input type="text" id="bg-name" class="bg-input" placeholder="Your name" autocomplete="name"/>
       <input type="email" id="bg-email" class="bg-input" placeholder="Email address" autocomplete="email"/>
       <input type="password" id="bg-password" class="bg-input" placeholder="Create a password (6+ characters)" autocomplete="new-password"/>
-      <input type="text" id="bg-invite-code" class="bg-input" placeholder="Invite code from a family member (optional)" autocomplete="off" autocapitalize="none"/>
+      <input type="text" id="bg-invite-code" class="bg-input" placeholder="Family invite code (optional)" autocomplete="off" autocapitalize="none"/>
+      <div class="bg-footer" id="bg-invite-hint" style="margin-top:-8px;text-align:left">Have a code from a family member? Enter it here to join their household instead of starting your own — you'll skip the next question too.</div>
       <button class="bg-btn" id="bg-info-btn">Continue</button>
       <div class="bg-error" id="bg-info-error"></div>
     </div>
@@ -801,6 +803,20 @@ async function generateHouseholdInvite() {
   }
   setState({inviteGenerating:false, inviteCode: data.code});
 }
+// Copies a shareable link that pre-fills the invite code field on the
+// signup screen (see showBetaGate's ?invite= handling) — so the person
+// joining doesn't have to carefully retype a 7-character code by hand.
+async function copyInviteLink() {
+  if (!state.inviteCode) return;
+  const link = `${location.origin}/?invite=${state.inviteCode}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    showToast("✓ Invite link copied");
+  } catch (e) {
+    console.warn("Clipboard copy failed", e);
+    showToast("Couldn't copy — long-press the code above instead.", "error");
+  }
+}
 
 const BETA_CODE = "appleaday26";
 const BETA_FORMSPREE = "https://formspree.io/f/mrejbvne";
@@ -808,6 +824,23 @@ const BETA_FORMSPREE = "https://formspree.io/f/mrejbvne";
 function showBetaGate() {
   document.getElementById("loading").style.display = "none";
   document.getElementById("beta-gate").classList.add("show");
+  // If they arrived via a shared invite link (?invite=CODE), pre-fill the
+  // household invite field now so it's already there once they reach step 2
+  // — they still have to enter the beta access code first (that gate can't
+  // safely be skipped just because an invite param is present, since it
+  // isn't validated until an account exists), but at least the one code
+  // that's actually theirs-to-share never needs retyping.
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const invite = params.get("invite");
+    if (invite) {
+      const inviteEl = document.getElementById("bg-invite-code");
+      if (inviteEl) inviteEl.value = invite.trim().toUpperCase();
+      const hintEl = document.getElementById("bg-invite-hint");
+      if (hintEl) hintEl.textContent = "✓ Invite code applied from your link — you'll join that household instead of starting a new one.";
+      window.history.replaceState({}, "", "/");
+    }
+  } catch(e) {}
   setTimeout(()=>{ document.getElementById("bg-code").focus(); }, 200);
 }
 
@@ -837,6 +870,7 @@ async function submitBetaInfo() {
   const passwordEl = document.getElementById("bg-password");
   const inviteEl = document.getElementById("bg-invite-code");
   const errorEl = document.getElementById("bg-info-error");
+  const btn = document.getElementById("bg-info-btn");
   const name = (nameEl.value || "").trim();
   const email = (emailEl.value || "").trim();
   const password = (passwordEl.value || "").trim();
@@ -851,10 +885,27 @@ async function submitBetaInfo() {
   }
   errorEl.textContent = "";
 
-  // Stash for role step to read
-  window._betaPending = { name: name, email: email, password: password, inviteCode: inviteCode };
+  const pending = { name: name, email: email, password: password, inviteCode: inviteCode };
+  window._betaPending = pending;
 
-  // Advance to role step
+  if (inviteCode) {
+    // Joining an existing household — skip the role-picker screen entirely.
+    // redeem_household_invite always assigns the role the invite itself was
+    // created with, so whatever this screen would've asked has zero effect
+    // for a joiner; asking it anyway would just be friction with no purpose.
+    btn.disabled = true;
+    btn.textContent = "Joining...";
+    const ok = await finishBetaOnboarding(pending, null);
+    if (!ok) {
+      errorEl.textContent = "That invite code didn't work — check it with whoever sent it, or clear it to start your own household instead.";
+      btn.disabled = false;
+      btn.textContent = "Continue";
+    }
+    return;
+  }
+
+  // No invite code — starting a brand-new household still needs to know
+  // what it's for, so continue to the role step as before.
   document.getElementById("bg-step-info").style.display = "none";
   document.getElementById("bg-step-role").style.display = "block";
 }
@@ -878,19 +929,12 @@ const ROLE_DB_MAP = {
   just_curious: "viewer"
 };
 
-async function submitBetaRole() {
-  const errorEl = document.getElementById("bg-role-error");
-  const btn = document.getElementById("bg-role-btn");
-  const pending = window._betaPending;
-
-  if (!pending || !_selectedRole) {
-    errorEl.textContent = "Please choose how you'll use the app.";
-    return;
-  }
-  errorEl.textContent = "";
-  btn.disabled = true;
-  btn.textContent = "Setting up...";
-
+// Shared tail for both onboarding paths — a fresh signup that picked a role,
+// and an invite-join that skips the role step entirely (see submitBetaInfo).
+// Returns true on success. On failure, nothing partial is left behind:
+// ensureAuthUser is idempotent, so retrying (e.g. after fixing a bad invite
+// code) just signs back into the same auth account rather than duplicating it.
+async function finishBetaOnboarding(pending, roleCode) {
   const roleLabels = {
     primary_parent: "Primary parent",
     caring_for_parent: "Caring for aging parent",
@@ -906,8 +950,8 @@ async function submitBetaRole() {
       body: JSON.stringify({
         name: pending.name,
         email: pending.email,
-        role: roleLabels[_selectedRole] || _selectedRole,
-        role_code: _selectedRole,
+        role: roleCode ? (roleLabels[roleCode] || roleCode) : "Joined via invite",
+        role_code: roleCode || "invite_join",
         signed_in_at: new Date().toISOString(),
         device: navigator.userAgent
       })
@@ -916,24 +960,17 @@ async function submitBetaRole() {
     console.warn("Formspree submit failed", e);
   }
 
-  // Either join an existing household via invite code, or create a new one —
-  // both run in the background; if either fails, the app still works locally.
-  const dbRole = ROLE_DB_MAP[_selectedRole] || "viewer";
   if (pending.inviteCode) {
     const joinedHouseholdId = await redeemInviteAndJoin(pending.name, pending.email, pending.password, pending.inviteCode);
-    if (!joinedHouseholdId) {
-      errorEl.textContent = "That invite code didn't work — check it with whoever sent it, or leave it blank to start your own household.";
-      btn.disabled = false;
-      btn.textContent = "Get Started";
-      return;
-    }
+    if (!joinedHouseholdId) return false;
   } else {
+    const dbRole = ROLE_DB_MAP[roleCode] || "viewer";
     await signUpAndCreateHousehold(pending.name, pending.email, pending.password, dbRole);
   }
 
   try {
     localStorage.setItem("ss:beta", JSON.stringify({
-      name: pending.name, email: pending.email, role: _selectedRole, signedInAt: Date.now()
+      name: pending.name, email: pending.email, role: roleCode, signedInAt: Date.now()
     }));
   } catch(e) {}
 
@@ -941,6 +978,28 @@ async function submitBetaRole() {
   document.getElementById("beta-gate").style.display = "none";
   document.getElementById("loading").style.display = "flex";
   setTimeout(realInit, 250);
+  return true;
+}
+
+async function submitBetaRole() {
+  const errorEl = document.getElementById("bg-role-error");
+  const btn = document.getElementById("bg-role-btn");
+  const pending = window._betaPending;
+
+  if (!pending || !_selectedRole) {
+    errorEl.textContent = "Please choose how you'll use the app.";
+    return;
+  }
+  errorEl.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "Setting up...";
+
+  const ok = await finishBetaOnboarding(pending, _selectedRole);
+  if (!ok) {
+    errorEl.textContent = "That invite code didn't work — check it with whoever sent it, or leave it blank to start your own household.";
+    btn.disabled = false;
+    btn.textContent = "Get Started";
+  }
 }
 
 // Returning-user sign-in — bypasses the whole beta-code/name/role ceremony.
@@ -3225,9 +3284,10 @@ function buildReport(filtered) {
   }).join("")}
   ${state.inviteCode?`
     <div style="margin-top:12px;padding:12px;background:#1e1610;border-radius:10px;border:1px solid rgba(201,166,107,0.25);text-align:center">
-      <div style="font-size:11px;color:#a0896e;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Share this code</div>
+      <div style="font-size:11px;color:#a0896e;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Invite code</div>
       <div style="font-size:22px;font-weight:700;letter-spacing:.15em;color:#f0e6d8;font-family:Georgia,serif">${state.inviteCode}</div>
-      <div style="font-size:11px;color:#a0896e;margin-top:8px">They enter this during sign-up to join your household instantly.</div>
+      <button data-action="copyInviteLink" style="margin-top:10px;background:#c9a66b;color:#1a1008;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">🔗 Copy Invite Link</button>
+      <div style="font-size:11px;color:#a0896e;margin-top:8px;line-height:1.5">Send them the link — it fills in this code for them automatically. They'll still need this beta's access code and to set up their own login; this code alone doesn't get them in.</div>
     </div>
   `:`
     <button data-action="generateInvite" style="margin-top:8px;background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">${state.inviteGenerating?"Generating...":"+ Invite a Family Member"}</button>
@@ -3414,6 +3474,7 @@ function handleAction(e) {
     case "cancelDeleteAccount": setState({showDeleteAccountConfirm:false, deleteAccountConfirmInput:""}); break;
     case "confirmDeleteAccount": deleteMyAccountAndData(); break;
     case "generateInvite": generateHouseholdInvite(); break;
+    case "copyInviteLink": copyInviteLink(); break;
     case "resetApp": {
       if (confirm("Reset all app data? This clears all medications, family members and settings.")) {
         ["ss:meds","ss:people","ss:pets","ss:colors","ss:emergency","ss:docs","ss-td"].forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});
