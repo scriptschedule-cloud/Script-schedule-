@@ -93,6 +93,21 @@ exports.handler = async function (event) {
     } catch (e) {
       claims = { decodeError: String(e.message || e) };
     }
+    // Try a harmless, non-destructive admin call (list users, capped to 1)
+    // to see whether the key is rejected by the admin API universally, or
+    // only for the delete verb/endpoint specifically.
+    let listProbe = null;
+    try {
+      const listResp = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=1`, {
+        method: "GET",
+        headers: { "apikey": raw, "Authorization": `Bearer ${raw}` }
+      });
+      const listBody = await listResp.json().catch(() => ({}));
+      listProbe = { status: listResp.status, ok: listResp.ok, body: listBody };
+    } catch (e) {
+      listProbe = { error: String(e.message || e) };
+    }
+
     return {
       statusCode: 200,
       headers,
@@ -107,7 +122,8 @@ exports.handler = async function (event) {
           prefix: raw.slice(0, 12),
           suffix: raw.slice(-6),
           dotCount: (raw.match(/\./g) || []).length, // a JWT has exactly 2 dots
-          claims
+          claims,
+          listProbe
         }
       })
     };
