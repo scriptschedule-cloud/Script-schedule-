@@ -108,6 +108,24 @@ exports.handler = async function (event) {
       listProbe = { error: String(e.message || e) };
     }
 
+    // Isolate whether DELETE specifically fails even with the same key that
+    // just succeeded for GET above. Only runs if a targetUserId was passed
+    // explicitly (never inferred) — this doubles as real cleanup for the
+    // known orphaned test account from earlier testing.
+    let deleteProbe = null;
+    if (body.targetUserId) {
+      try {
+        const delResp = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${body.targetUserId}`, {
+          method: "DELETE",
+          headers: { "apikey": raw, "Authorization": `Bearer ${raw}` }
+        });
+        const delBody = await delResp.json().catch(() => ({}));
+        deleteProbe = { status: delResp.status, ok: delResp.ok, body: delBody };
+      } catch (e) {
+        deleteProbe = { error: String(e.message || e) };
+      }
+    }
+
     return {
       statusCode: 200,
       headers,
@@ -123,7 +141,8 @@ exports.handler = async function (event) {
           suffix: raw.slice(-6),
           dotCount: (raw.match(/\./g) || []).length, // a JWT has exactly 2 dots
           claims,
-          listProbe
+          listProbe,
+          deleteProbe
         }
       })
     };
