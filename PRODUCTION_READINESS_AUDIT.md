@@ -19,8 +19,11 @@ Each issue lists: what it is, where it lives, why it matters, what happens if it
   2. Use a service like **PWABuilder** to package the PWA for store submission.
   3. Ship as an installable PWA only (no App Store presence) — fully valid for many use cases, avoids Apple/Google review entirely.
   4. A full native rewrite (React Native/Flutter/native Swift+Kotlin) — largest lift, not recommended given the working rule against redesigning without necessity.
-- **Could affect existing features:** No — none of these options require changing the current app's code to start.
-- **How to test:** N/A until a direction is chosen.
+- **Status: decision made, scaffolding done.** Chose **Capacitor** (smallest lift, no redesign needed). Committed (`4658c90`): `package.json` + Capacitor 8.5.0 packages, `capacitor.config.json` (appId `app.scriptschedule.mobile` — a placeholder, change it now if you want something else, since it becomes fixed once submitted to a store), `www/` (copy of the static app), and generated `ios/` + `android/` native projects via `npx cap add`.
+  - **Blocked on local tooling, not code** — verified by hitting the real errors directly on this machine: iOS needs full **Xcode.app** installed (only Command Line Tools are present; `xcodebuild` explicitly refuses to run under CLT alone) — install from the Mac App Store, then `sudo xcode-select -s /Applications/Xcode.app`. Android needs a **JDK** installed (Gradle can't locate any Java runtime at all right now) — e.g. `brew install --cask temurin`, or Android Studio's bundled JDK.
+  - Once those are installed: `npx cap open ios` / `npx cap open android` to build and run on a simulator/device.
+- **Could affect existing features:** No — the web app (`index.html` etc.) is untouched; this only adds new files.
+- **How to test:** once Xcode/JDK are installed, build and run each platform in its respective simulator, confirm the app loads and core flows (sign in, add a medication, scan) work inside the native shell the same as in a browser.
 
 ### C2. Old, unpatched copies of the app are live on the production domain right now
 - **Where:** `app-index.html`, `index .html`, `ScriptSchedule-App/index.html`, `ScriptSchedule-App/index-app-CURRENT.html`, `scriptschedule-app 2/index.html` — all published because `netlify.toml` publishes the whole repo root (`publish = "."`) and the `_redirects` catch-all (`/* /index.html 200`) only applies when no file exists at the requested path.
@@ -35,7 +38,7 @@ Each issue lists: what it is, where it lives, why it matters, what happens if it
 - **Recommended fix:** confirm these URLs are actually reachable on the live site (quick manual check), then either delete the dead files/directories entirely (git-recoverable, not permanent) or add explicit `_redirects`/`_headers` rules blocking them. Also applies to the abandoned `scriptschedule/` CRA scaffold and duplicated marketing images (~12MB) — see ARCHITECTURE.md's duplicate-files table.
 - **Could affect existing features:** No — none of these files are linked from or used by the live app.
 - **How to test:** after removal, request each old path directly and confirm it 404s or redirects to the current app instead of serving the old file.
-- **Needs your go-ahead before I delete anything** — this touches multiple files/directories and the working rules ask me to flag this kind of change first.
+- **Status: dead files removed and pushed to `origin/main`** (commit `3fe27f2`), but re-checking the live site immediately after the push still shows the OLD content at these URLs (verified: `/app-index.html` still 71,286 bytes, still no `escapeHtml()`). This means either the Netlify deploy simply hasn't finished yet, or — worth checking directly — this site may not be wired for continuous git-based deployment at all (the original `README.txt` describes a manual drag-and-drop deploy workflow). **Please check the Netlify dashboard's Deploys tab to confirm a deploy actually ran from this push, and re-verify these URLs afterward.**
 
 ### C3. Medication push reminders are scheduled in the wrong timezone for most users
 - **Where:** `netlify/functions/schedule-push.js`, specifically `const now = new Date()` and `sendAt.setHours(hour, minute || 0, 0, 0)`. Verified: no timezone, UTC offset, or IANA timezone name is ever sent from the client (grepped `index.html` and all four functions for "timezone", "getTimezoneOffset", "Intl.DateTimeFormat" — zero matches).

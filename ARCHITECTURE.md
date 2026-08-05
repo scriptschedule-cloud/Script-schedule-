@@ -109,12 +109,13 @@ Push to the connected git branch → Netlify auto-deploys (static publish, no bu
 
 ## Apple & Android configuration
 
-**None exists.** This is a web app / PWA only:
-- No Xcode project, no `ios/` directory, no bundle identifier.
-- No Android Studio project, no `android/` directory, no package name, no `AndroidManifest.xml`.
-- No Capacitor, Cordova, React Native, or Expo wrapper of any kind.
+**Capacitor** native shells for both platforms, added and committed:
+- `capacitor.config.json` — appId `app.scriptschedule.mobile` (placeholder; change before any store submission if you want something else — it's fixed once submitted).
+- `www/` — the web app's static files, copied in (regenerate via `npm run sync-www` after editing the root files; `npm run cap:sync` re-syncs into both native projects too).
+- `ios/App.xcodeproj` — generated via `npx cap add ios`. Uses Swift Package Manager for Capacitor's native runtime (no CocoaPods needed on Capacitor 8).
+- `android/` — generated via `npx cap add android` (standard Gradle project).
 
-**This is the single biggest gap relative to an "App Store release" goal** and needs an explicit decision from you before any Phase 17 work can proceed — see the audit's Critical-1.
+**Neither platform can actually be built on this machine yet** — verified by hitting the real errors directly: `xcodebuild` requires full Xcode.app (only Command Line Tools are installed here), and Gradle can't find any Java runtime at all. Both are standard, expected local-tooling requirements, not code problems. Once installed: `npx cap open ios` / `npx cap open android`.
 
 ## Known unfinished features / gaps (from this session's work and code inspection)
 

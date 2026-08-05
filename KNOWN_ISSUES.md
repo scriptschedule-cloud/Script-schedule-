@@ -4,8 +4,8 @@ Running log of open issues. Full detail (why it matters, recommended fix, test p
 
 ## Open — Critical
 
-- **C1** — No native app project exists; "App Store release" needs a scoping decision (Capacitor / PWABuilder / PWA-only / native rewrite) before Phase 17 work can start.
-- **C2** — Old, pre-XSS-fix copies of the app are confirmed live on the production domain (`app-index.html`, `index%20.html`, `ScriptSchedule-App/index.html`, `scriptschedule-app%202/index.html`). Pending approval to remove.
+- **C1** — Native app: decision made (Capacitor) and scaffolding committed (`4658c90`). Blocked on local tooling: iOS needs full Xcode.app installed (only CLT present), Android needs a JDK installed (none present). Not a code issue — install both, then `npx cap open ios` / `npx cap open android`.
+- **C2** — Old, pre-XSS-fix copies of the app were removed and pushed (`3fe27f2`), but the live site still served the old content immediately after — **needs you to check the Netlify dashboard's Deploys tab** to confirm a deploy actually ran (this site may be on manual/drag-and-drop deploy rather than git auto-deploy) and re-verify the URLs afterward.
 - **C3** — Push reminders are scheduled using server (UTC) time with no timezone handling at all — reminders fire at the wrong local time for non-UTC users. Confirmed in `netlify/functions/schedule-push.js`.
 - **C4** — Zero automated tests, zero CI.
 
