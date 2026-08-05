@@ -5,7 +5,6 @@ Running log of open issues. Full detail (why it matters, recommended fix, test p
 ## Open — Critical
 
 - **C1** — Native app: decision made (Capacitor) and scaffolding committed (`4658c90`). Blocked on local tooling: iOS needs full Xcode.app installed (only CLT present), Android needs a JDK installed (none present). Not a code issue — install both, then `npx cap open ios` / `npx cap open android`.
-- **C3** — Push reminders are scheduled using server (UTC) time with no timezone handling at all — reminders fire at the wrong local time for non-UTC users. Confirmed in `netlify/functions/schedule-push.js`.
 - **C4** — Zero automated tests, zero CI.
 
 ## Open — High
@@ -23,6 +22,7 @@ See the audit's Medium/Low sections — representative, not yet an exhaustive sw
 
 ## Resolved this session (for the record)
 
+- **C3** — Push reminders were scheduled using server (UTC) time with no timezone handling — fixed in `netlify/functions/schedule-push.js` using `Intl`-based timezone conversion; client now sends its IANA timezone. Verified via direct unit tests across multiple zones and both 2026 US DST transition dates. Rollout caveat: already-scheduled notifications from before this fix self-correct the next time each device opens the app (which now cancels-then-reschedules), not instantly for everyone.
 - **C2** — Old, pre-XSS-fix duplicate app copies removed from the repo (`3fe27f2`) and confirmed gone from production (`scriptschedule.app/app-index.html` etc. now correctly serve the current patched app, 210,296 bytes, verified 2026-08-04 via direct fetch after a brief CDN propagation delay).
 - Stored XSS across `index.html` — fixed, `escapeHtml()` added at 85 interpolation points.
 - All four Netlify functions had zero identity checks — fixed, each now requires a verified Supabase session + per-user rate limiting.

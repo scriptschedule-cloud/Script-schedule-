@@ -2205,10 +2205,17 @@ async function scheduleRemoteCaregiverPush(targetUserId, personMeds) {
   try {
     const { data: { session } } = await sbClient.auth.getSession();
     if (!session) return;
+    // Known approximation: this uses the ASSIGNING device's timezone, not
+    // necessarily the new caregiver's — there's nowhere today that stores a
+    // per-user timezone. If they're in a different zone, this initial
+    // remote schedule will be off until their own device next opens and
+    // calls syncPushSchedule(), which cancels and reschedules using their
+    // device's actual timezone.
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     await fetch("/.netlify/functions/schedule-push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscriptionId, meds: scheduleableMeds, daysAhead: 7, accessToken: session.access_token })
+      body: JSON.stringify({ subscriptionId, meds: scheduleableMeds, daysAhead: 7, timeZone, accessToken: session.access_token })
     });
   } catch (e) {
     console.warn("Remote caregiver schedule-push error:", e);
@@ -2242,6 +2249,13 @@ async function syncPushSchedule() {
   try {
     const { data: { session } } = await sbClient.auth.getSession();
     if (!session) return;
+    // Cancel each medication's existing scheduled pushes before rescheduling.
+    // This is what flushes out any notifications still sitting in OneSignal
+    // from before the timezone fix below (they were created under the old,
+    // timezone-unaware math and won't correct themselves otherwise), and
+    // generally keeps stale/duplicate entries from accumulating over time.
+    await Promise.all(scheduleableMeds.map(m => cancelMedPushes(m.id)));
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const r = await fetch("/.netlify/functions/schedule-push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2249,6 +2263,7 @@ async function syncPushSchedule() {
         subscriptionId,
         meds: scheduleableMeds,
         daysAhead: 7,
+        timeZone,
         accessToken: session.access_token
       })
     });
