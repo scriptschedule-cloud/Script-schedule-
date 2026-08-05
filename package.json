@@ -1,0 +1,18 @@
+{
+  "name": "scriptschedule",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor native shell for the ScriptSchedule web app (index.html). The web app itself has no build step; www/ is a plain copy of the static files that ship inside the native app.",
+  "scripts": {
+    "sync-www": "cp index.html privacy.html manifest.json sw.js favicon.ico icon-152.png icon-167.png icon-180.png icon-192.png icon-512.png www/",
+    "cap:sync": "npm run sync-www && npx cap sync"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.0"
+  }
+}

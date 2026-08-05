@@ -1,1 +1,20 @@
 .DS_Store
+
+# Node / Capacitor CLI tooling
+node_modules/
+
+# iOS (Xcode) — build output and per-developer state, never the project itself
+ios/App/build/
+ios/App/Pods/
+ios/**/xcuserdata/
+ios/**/*.xcuserstate
+ios/App/App/public/
+
+# Android (Gradle) — build output and machine-specific paths, never the project itself
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/**/*.iml
+android/.idea/
+android/app/src/main/assets/public/
