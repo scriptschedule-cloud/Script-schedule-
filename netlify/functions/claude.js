@@ -1,6 +1,32 @@
+// Previously this forwarded any POST body straight to Anthropic with no
+// caller-identity check at all — anyone who found this URL could spend the
+// app owner's Anthropic quota. Now requires a verified Supabase session
+// (accessToken in the body, same convention as delete-account.js) and caps
+// each user to 30 calls per 10 minutes — generous for normal scan/pill-ID/
+// document-upload use, but not for a scripted abuse loop.
+const { verifyUser, checkRateLimit } = require("./_shared/security");
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method not allowed" };
+  }
+
+  let body;
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch (e) {
+    return { statusCode: 400, body: JSON.stringify({ error: { message: "invalid_json" } }) };
+  }
+
+  const { accessToken, ...anthropicPayload } = body;
+  const user = await verifyUser(accessToken);
+  if (!user) {
+    return { statusCode: 401, body: JSON.stringify({ error: { message: "unauthorized" } }) };
+  }
+
+  const allowed = await checkRateLimit(`claude:${user.id}`, 30, 600);
+  if (!allowed) {
+    return { statusCode: 429, body: JSON.stringify({ error: { message: "rate_limited" } }) };
   }
 
   try {
@@ -11,7 +37,7 @@ exports.handler = async (event) => {
         "x-api-key": process.env.ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01"
       },
-      body: event.body
+      body: JSON.stringify(anthropicPayload)
     });
 
     const data = await response.json();

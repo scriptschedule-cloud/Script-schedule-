@@ -26,6 +26,8 @@
 //   { ok: true }                  on success
 //   { ok: false, error: "..." }   on failure
 
+const { checkRateLimit } = require("./_shared/security");
+
 const SUPABASE_URL = "https://txaezqhbtjbtbxwlveoq.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_DMnbXfeIUUEFf3OICUE-fA_N3gfZZcw";
 
@@ -94,6 +96,13 @@ exports.handler = async function (event) {
     const user = await verifyResp.json();
     if (!user || !user.id) {
       return { statusCode: 401, headers, body: JSON.stringify({ ok: false, error: "invalid_session" }) };
+    }
+
+    // A real user shouldn't hit this more than once — caps the damage if a
+    // valid token is ever replayed in a loop.
+    const allowed = await checkRateLimit(`delete-account:${user.id}`, 5, 3600);
+    if (!allowed) {
+      return { statusCode: 429, headers, body: JSON.stringify({ ok: false, error: "rate_limited" }) };
     }
 
     // Now delete, using the service role key — the only credential allowed

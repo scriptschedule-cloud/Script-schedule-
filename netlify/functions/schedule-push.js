@@ -17,6 +17,14 @@
 //
 // IMPORTANT: This function reads ONESIGNAL_APP_ID and ONESIGNAL_REST_API_KEY
 // from Netlify environment variables. Both must be set or this returns an error.
+//
+// Requires accessToken in the body (a verified Supabase session) — this used
+// to accept a subscriptionId + meds array from anyone with no identity check
+// at all. Rate-limited per caller (not just per subscriptionId) since a
+// signed-in household member legitimately schedules pushes for a caregiver
+// on another device (see scheduleRemoteCaregiverPush in index.html).
+
+const { verifyUser, checkRateLimit } = require("./_shared/security");
 
 exports.handler = async function (event, context) {
   // CORS headers — Netlify Functions are same-origin to the site so this is mostly defensive
@@ -65,7 +73,17 @@ exports.handler = async function (event, context) {
     };
   }
 
-  const { subscriptionId, meds, daysAhead = 7 } = body;
+  const { accessToken, subscriptionId, meds, daysAhead = 7 } = body;
+
+  const user = await verifyUser(accessToken);
+  if (!user) {
+    return { statusCode: 401, headers, body: JSON.stringify({ ok: false, error: "unauthorized" }) };
+  }
+
+  const allowed = await checkRateLimit(`schedule-push:${user.id}`, 20, 300);
+  if (!allowed) {
+    return { statusCode: 429, headers, body: JSON.stringify({ ok: false, error: "rate_limited" }) };
+  }
 
   if (!subscriptionId || typeof subscriptionId !== "string") {
     return {

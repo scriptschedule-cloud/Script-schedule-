@@ -492,6 +492,7 @@ let state = {
   showDeleteAccountConfirm: false,
   deleteAccountConfirmInput: "",
   deletingAccount: false,
+  signingOutOthers: false,
   editMedId: null,
   form: {person:"Your Name",name:"",dose:"",frequency:"Daily",time:"08:00",notes:"",pharmacy:""},
   scanImagePreview: null,
@@ -1666,6 +1667,28 @@ async function deleteMyAccountAndData() {
     setState({ deletingAccount: false });
   }
 }
+// Revokes every OTHER active session for this account — e.g. a lost or
+// stolen phone that's still signed in — while leaving the device the user
+// is on right now untouched. Supabase's scope:"others" invalidates those
+// sessions' refresh tokens server-side, so the next time that other device
+// tries to use its session it's rejected and has to sign in again.
+async function signOutOtherDevices() {
+  setState({ signingOutOthers: true });
+  try {
+    const { error } = await sbClient.auth.signOut({ scope: "others" });
+    if (error) {
+      console.warn("signOut(others) failed", error);
+      showToast("Couldn't sign out other devices — try again.", "error");
+    } else {
+      showToast("✓ Signed out of all other devices");
+    }
+  } catch (e) {
+    console.warn("signOutOtherDevices failed", e);
+    showToast("Something went wrong — try again.", "error");
+  } finally {
+    setState({ signingOutOthers: false });
+  }
+}
 // Renames a family member via the rename_family_member RPC (existed in the
 // schema since 0001 but had no UI hookup — the only way to fix a typo was
 // deleting and re-adding, which orphans that person's medication history).
@@ -1827,6 +1850,9 @@ async function callClaude(messages, maxTokens=1200, opts={}) {
   const maxRetries = opts.retries ?? 1;
   const timeoutMs = opts.timeout ?? 45000;
 
+  const { data: { session } } = await sbClient.auth.getSession();
+  if (!session) throw new Error("not_signed_in");
+
   let lastError = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -1836,7 +1862,7 @@ async function callClaude(messages, maxTokens=1200, opts={}) {
       const r = await fetch("/.netlify/functions/claude", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({model:"claude-sonnet-4-6", max_tokens:maxTokens, messages}),
+        body: JSON.stringify({model:"claude-sonnet-4-6", max_tokens:maxTokens, messages, accessToken: session.access_token}),
         signal: controller.signal
       });
       clearTimeout(timeoutHandle);
@@ -2177,10 +2203,12 @@ async function scheduleRemoteCaregiverPush(targetUserId, personMeds) {
     .map(toPushPayload);
   if (scheduleableMeds.length === 0) return;
   try {
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (!session) return;
     await fetch("/.netlify/functions/schedule-push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscriptionId, meds: scheduleableMeds, daysAhead: 7 })
+      body: JSON.stringify({ subscriptionId, meds: scheduleableMeds, daysAhead: 7, accessToken: session.access_token })
     });
   } catch (e) {
     console.warn("Remote caregiver schedule-push error:", e);
@@ -2212,13 +2240,16 @@ async function syncPushSchedule() {
   if (scheduleableMeds.length === 0) return;
 
   try {
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (!session) return;
     const r = await fetch("/.netlify/functions/schedule-push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         subscriptionId,
         meds: scheduleableMeds,
-        daysAhead: 7
+        daysAhead: 7,
+        accessToken: session.access_token
       })
     });
     const data = await r.json();
@@ -2234,10 +2265,12 @@ async function syncPushSchedule() {
 async function cancelMedPushes(medId) {
   if (!pushEnabled()) return;
   try {
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (!session) return;
     await fetch("/.netlify/functions/cancel-push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ medId, daysAhead: 7 })
+      body: JSON.stringify({ medId, daysAhead: 7, accessToken: session.access_token })
     });
   } catch (e) {
     console.warn("Cancel push error:", e);
@@ -3317,6 +3350,11 @@ function buildReport(filtered) {
   <div style="font-size:11px;color:#4a3a34;margin-top:8px;line-height:1.5">Clears saved data on THIS device only — your account and cloud data are untouched. Use this to start fresh on a shared device.</div>
 
   <div style="margin-top:16px;padding-top:16px;border-top:1px solid #3a2e24">
+    <button data-action="signOutOtherDevices" ${state.signingOutOthers?"disabled":""} style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%;opacity:${state.signingOutOthers?0.6:1}">${state.signingOutOthers?"Signing out...":"🔒 Sign Out of Other Devices"}</button>
+    <div style="font-size:11px;color:#4a3a34;margin-top:8px;line-height:1.5">Lost your phone, or think someone else is signed in? This signs out every OTHER device using your account — this one stays signed in.</div>
+  </div>
+
+  <div style="margin-top:16px;padding-top:16px;border-top:1px solid #3a2e24">
     ${state.showDeleteAccountConfirm ? `
       <div style="font-size:12px;color:#e8a090;line-height:1.6;margin-bottom:10px">This permanently deletes your account and, if you're the only member of your household, all its medications, history, and documents. This cannot be undone.</div>
       <input id="deleteAccountConfirmInput" value="${escapeHtml(state.deleteAccountConfirmInput)}" placeholder='Type "DELETE" to confirm' style="width:100%;box-sizing:border-box;background:#1e1610;border:1px solid #7a2a20;border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8;margin-bottom:10px;text-align:center"/>
@@ -3346,7 +3384,7 @@ function buildReport(filtered) {
       <span style="font-size:20px;flex-shrink:0">🔒</span>
       <div>
         <div style="font-size:13px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;margin-bottom:3px">Encrypted & Secure</div>
-        <div style="font-size:12px;color:#a0896e;line-height:1.6">Your data is encrypted and stored securely. Nobody else can read your family's records — not even us.</div>
+        <div style="font-size:12px;color:#a0896e;line-height:1.6">Your data is encrypted in transit and at rest, and access is restricted at the database level to your own household — not other ScriptSchedule users.</div>
       </div>
     </div>
 
@@ -3354,7 +3392,7 @@ function buildReport(filtered) {
       <span style="font-size:20px;flex-shrink:0">👁️</span>
       <div>
         <div style="font-size:13px;font-weight:700;color:#f0e6d8;font-family:Georgia,serif;margin-bottom:3px">Only You Can See It</div>
-        <div style="font-size:12px;color:#a0896e;line-height:1.6">Your prescription information is locked to your account. Only your family sees it — no one else, ever.</div>
+        <div style="font-size:12px;color:#a0896e;line-height:1.6">Your prescription information is locked to your household. Only signed-in members of your household can see it — not other ScriptSchedule users.</div>
       </div>
     </div>
 
@@ -3490,6 +3528,12 @@ function handleAction(e) {
     case "showDeleteAccount": setState({showDeleteAccountConfirm:true, deleteAccountConfirmInput:""}); break;
     case "cancelDeleteAccount": setState({showDeleteAccountConfirm:false, deleteAccountConfirmInput:""}); break;
     case "confirmDeleteAccount": deleteMyAccountAndData(); break;
+    case "signOutOtherDevices": {
+      if (confirm("Sign out every other device using your account? This one will stay signed in.")) {
+        signOutOtherDevices();
+      }
+      break;
+    }
     case "generateInvite": generateHouseholdInvite(); break;
     case "copyInviteLink": copyInviteLink(); break;
     case "resetApp": {

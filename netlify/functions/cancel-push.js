@@ -17,6 +17,11 @@
 // Returns:
 //   { ok: true, cancelled: N }   on success
 //   { ok: false, error: "..." }  on failure
+//
+// Requires accessToken in the body (a verified Supabase session) — this used
+// to accept a bare medId from anyone with no identity check at all.
+
+const { verifyUser, checkRateLimit } = require("./_shared/security");
 
 exports.handler = async function (event, context) {
   const headers = {
@@ -64,7 +69,17 @@ exports.handler = async function (event, context) {
     };
   }
 
-  const { medId } = body;
+  const { accessToken, medId } = body;
+
+  const user = await verifyUser(accessToken);
+  if (!user) {
+    return { statusCode: 401, headers, body: JSON.stringify({ ok: false, error: "unauthorized" }) };
+  }
+
+  const allowed = await checkRateLimit(`cancel-push:${user.id}`, 20, 300);
+  if (!allowed) {
+    return { statusCode: 429, headers, body: JSON.stringify({ ok: false, error: "rate_limited" }) };
+  }
 
   if (!medId) {
     return {
