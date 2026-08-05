@@ -536,6 +536,21 @@ function load(key, fallback) {
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 function getColor(p) { return state.colorMap[p] || "#8c7b74"; }
 function getInitials(n) { return n.split(" ").map(x=>x[0]).join("").toUpperCase(); }
+// Every view is built as an HTML string and painted via innerHTML, so any
+// user-entered text (a family member's name, a medication note, an allergy,
+// a document summary...) that reaches a template literal unescaped becomes
+// executable HTML/JS for every OTHER household member who views it — a real
+// stored-XSS path now that households have more than one real login. Wrap
+// every such value in this before interpolating it.
+function escapeHtml(str) {
+  if (str == null) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 function getFiltered() {
   const base = state.meds.filter(m=>!isArchived(m));
   return state.selectedPerson === "All" ? base : base.filter(m=>m.person===state.selectedPerson);
@@ -578,7 +593,9 @@ function familyMemberIdForName(name) {
 function rosterLabel(userId) {
   if (userId === state.currentUserId) return "Me";
   const member = (state.householdRoster || []).find(r => r.user_id === userId);
-  return (member && member.display_name) || "Household member";
+  // display_name is free text the member set themselves — escape here, once,
+  // so every call site (option text, status lines) is safe automatically.
+  return escapeHtml((member && member.display_name) || "Household member");
 }
 
 // Lets a member set/update the name OTHER household members see for them.
@@ -2600,7 +2617,7 @@ function buildApp() {
     const d = new Date(today); d.setDate(today.getDate()-today.getDay()+i); return d;
   });
 
-  const toastHTML = state.toast ? `<div class="toast" style="background:${state.toast.type==="error"?"#8a4b3a":state.toast.type==="info"?"#4a5568":"#4a7c59"}">${state.toast.msg}</div>` : "";
+  const toastHTML = state.toast ? `<div class="toast" style="background:${state.toast.type==="error"?"#8a4b3a":state.toast.type==="info"?"#4a5568":"#4a7c59"}">${escapeHtml(state.toast.msg)}</div>` : "";
 
   return `
 ${toastHTML}
@@ -2627,10 +2644,10 @@ ${state.view==="dashboard"?`
     <div class="people-grid">
       ${state.people.map(p=>`
         <div class="person-wrap">
-          <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${p}">
-            <span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span>
+          <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${escapeHtml(p)}">
+            <span class="avatar" style="background:${getColor(p)}">${escapeHtml(getInitials(p))}</span><span class="person-name-text">${escapeHtml(p)}</span>
           </button>
-          <button class="remove-btn" data-action="removePerson" data-person="${p}">×</button>
+          <button class="remove-btn" data-action="removePerson" data-person="${escapeHtml(p)}">×</button>
         </div>`).join("")}
     </div>
   `:""}
@@ -2639,10 +2656,10 @@ ${state.view==="dashboard"?`
     <div class="people-grid">
       ${state.pets.map(p=>`
         <div class="person-wrap">
-          <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${p}">
-            <span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span>
+          <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${escapeHtml(p)}">
+            <span class="avatar" style="background:${getColor(p)}">${escapeHtml(getInitials(p))}</span><span class="person-name-text">${escapeHtml(p)}</span>
           </button>
-          <button class="remove-btn" data-action="removePerson" data-person="${p}">×</button>
+          <button class="remove-btn" data-action="removePerson" data-person="${escapeHtml(p)}">×</button>
         </div>`).join("")}
     </div>
   `:""}
@@ -2655,7 +2672,7 @@ ${state.view==="dashboard"?`
           <button data-action="setNewPersonKind" data-kind="pet" style="flex:1;padding:8px;border-radius:8px;font-size:13px;cursor:pointer;background:${state.newPersonKind==="pet"?"#c9a66b":"#2a1f14"};color:${state.newPersonKind==="pet"?"#1a1008":"#c9a66b"};border:1px solid ${state.newPersonKind==="pet"?"#c9a66b":"rgba(201,166,107,0.3)"}">🐾 Pet</button>
         </div>
         <div style="display:flex;gap:6px;width:100%">
-          <input class="person-name-input" id="newPersonInput" value="${state.newPersonName}" placeholder="Name..." style="flex:1"/>
+          <input class="person-name-input" id="newPersonInput" value="${escapeHtml(state.newPersonName)}" placeholder="Name..." style="flex:1"/>
           <button class="confirm-btn" data-action="addPerson">✓</button>
           <button class="cancel-btn" data-action="cancelAddPerson">×</button>
         </div>
@@ -2721,11 +2738,11 @@ function buildReminderBanner() {
       <div class="reminder-title">Time for your medication</div>
     </div>
     <div class="reminder-med">
-      <div class="reminder-med-name">${r.medName}</div>
-      ${med && med.dose ? `<div class="reminder-med-dose">${med.dose}</div>` : ""}
+      <div class="reminder-med-name">${escapeHtml(r.medName)}</div>
+      ${med && med.dose ? `<div class="reminder-med-dose">${escapeHtml(med.dose)}</div>` : ""}
       <div class="reminder-med-meta">
         <span class="reminder-person-dot" style="background:${personColor}"></span>
-        <span>${r.person}</span>
+        <span>${escapeHtml(r.person)}</span>
         <span style="opacity:.5">·</span>
         <span>${formatTime12(r.time)}</span>
       </div>
@@ -2798,7 +2815,7 @@ function buildMeds(filtered) {
   return `
 <div class="inline-picker" style="grid-template-columns:repeat(auto-fill,minmax(90px,1fr))">
   <button class="person-btn ${state.selectedPerson==="All"?"active":""}" style="${state.selectedPerson==="All"?"background:#c9a66b;color:#1a1008;border-color:#c9a66b":""}" data-action="selectPerson" data-person="All">⊞ All</button>
-  ${getAllPeople().map(p=>`<button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span></button>`).join("")}
+  ${getAllPeople().map(p=>`<button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${escapeHtml(p)}"><span class="avatar" style="background:${getColor(p)}">${escapeHtml(getInitials(p))}</span><span class="person-name-text">${escapeHtml(p)}</span></button>`).join("")}
 </div>
 <div class="section-header"><span>All Medications</span><button class="add-btn" data-action="openAdd">+ Add New</button></div>
 ${active.length===0 && past.length===0?`<div class="empty-state"><div style="font-size:36px;margin-bottom:8px">💊</div>No medications yet.<br/><span style="font-size:14px;opacity:.8">Tap <b>+ Add New</b> or use <b>Scan</b> to get started.</span></div>`:""}
@@ -2812,17 +2829,17 @@ function buildMedCard(m, compact, isPast) {
   const refillsBadge = m.refillsRemaining != null ? `<span class="person-tag" style="background:#3a2e2455;color:#c9a66b;margin-left:6px">${m.refillsRemaining} refill${m.refillsRemaining===1?"":"s"}</span>` : "";
   const dueLine = isPast
     ? `Course ended ${(courseEndDate(m)||new Date()).toLocaleDateString("en-US",{month:"short",day:"numeric"})}`
-    : `⏰ ${m.nextDue}${taken?`<span class="taken-badge">✓ Taken</span>`:""}`;
+    : `⏰ ${escapeHtml(m.nextDue)}${taken?`<span class="taken-badge">✓ Taken</span>`:""}`;
   return `
 <div class="med-card ${taken?"taken":""} ${isPast?"past-course":""}" style="border-left-color:${c}${isPast?";opacity:.6":""}">
   <div class="med-card-top">
     <div class="med-dot" style="background:${c}"></div>
     <div style="flex:1">
-      <div class="med-name">${m.name}</div>
-      <div class="med-meta">${m.dose} · ${m.frequency}</div>
-      ${!compact&&m.notes?`<div class="med-notes">${m.notes}</div>`:""}
+      <div class="med-name">${escapeHtml(m.name)}</div>
+      <div class="med-meta">${escapeHtml(m.dose)} · ${escapeHtml(m.frequency)}</div>
+      ${!compact&&m.notes?`<div class="med-notes">${escapeHtml(m.notes)}</div>`:""}
     </div>
-    <div class="person-tag" style="background:${c}33;color:${c}">${m.person}</div>
+    <div class="person-tag" style="background:${c}33;color:${c}">${escapeHtml(m.person)}</div>
     ${refillsBadge}
   </div>
   <div class="med-next-due">${dueLine}</div>
@@ -2847,14 +2864,14 @@ function buildAdd() {
     <label class="form-label">Person *
       <select class="form-input" id="f-person">
         ${!f.person?`<option value="" disabled selected>Choose a person or pet...</option>`:""}
-        ${getAllPeople().map(p=>`<option ${f.person===p?"selected":""}>${p}</option>`).join("")}
+        ${getAllPeople().map(p=>`<option ${f.person===p?"selected":""}>${escapeHtml(p)}</option>`).join("")}
       </select>
     </label>
     <label class="form-label">Medication Name *
-      <input class="form-input" id="f-name" value="${f.name}" placeholder="e.g. Metformin"/>
+      <input class="form-input" id="f-name" value="${escapeHtml(f.name)}" placeholder="e.g. Metformin"/>
     </label>
     <label class="form-label">Dosage *
-      <input class="form-input" id="f-dose" value="${f.dose}" placeholder="e.g. 500mg"/>
+      <input class="form-input" id="f-dose" value="${escapeHtml(f.dose)}" placeholder="e.g. 500mg"/>
     </label>
     <label class="form-label">Frequency
       <select class="form-input" id="f-freq">
@@ -2868,10 +2885,10 @@ function buildAdd() {
       <input type="number" min="0" class="form-input" id="f-refills" value="${f.refillsRemaining??""}" placeholder="Optional"/>
     </label>
     <label class="form-label">Pharmacy
-      <input class="form-input" id="f-pharmacy" value="${f.pharmacy||""}" placeholder="CVS, Walgreens..."/>
+      <input class="form-input" id="f-pharmacy" value="${escapeHtml(f.pharmacy||"")}" placeholder="CVS, Walgreens..."/>
     </label>
     <label class="form-label full">Notes
-      <textarea class="form-input" id="f-notes" placeholder="Special instructions...">${f.notes||""}</textarea>
+      <textarea class="form-input" id="f-notes" placeholder="Special instructions...">${escapeHtml(f.notes||"")}</textarea>
     </label>
   </div>
 
@@ -2905,11 +2922,11 @@ function buildScan() {
     <label class="scan-btn secondary">🖼 Choose Image<input type="file" accept="image/*" style="display:none" data-upload="scan"/></label>
   </div>
   <div style="font-size:11px;color:#7a6a62;text-align:center;margin-top:8px;line-height:1.5">Photos are sent to a third-party AI service to read the label, then discarded — only the extracted details are saved.</div>
-  ${state.scanError?`<div class="error-box">⚠️ ${state.scanError}</div>`:""}
+  ${state.scanError?`<div class="error-box">⚠️ ${escapeHtml(state.scanError)}</div>`:""}
   ${state.scanResult?`
     <div class="scan-result-card">
       <div class="scan-result-title">✓ Label Read Successfully</div>
-      ${[["Medication",state.scanResult.name],["Dose",state.scanResult.dose],["Directions",state.scanResult.directions],["Prescriber",state.scanResult.prescriber],["Pharmacy",state.scanResult.pharmacy],["Refills",state.scanResult.refills],["Patient",state.scanResult.patient]].filter(([,v])=>v&&v!=="Not found").map(([k,v])=>`<div class="scan-row"><span class="scan-key">${k}</span><span class="scan-val">${v}</span></div>`).join("")}
+      ${[["Medication",state.scanResult.name],["Dose",state.scanResult.dose],["Directions",state.scanResult.directions],["Prescriber",state.scanResult.prescriber],["Pharmacy",state.scanResult.pharmacy],["Refills",state.scanResult.refills],["Patient",state.scanResult.patient]].filter(([,v])=>v&&v!=="Not found").map(([k,v])=>`<div class="scan-row"><span class="scan-key">${k}</span><span class="scan-val">${escapeHtml(v)}</span></div>`).join("")}
       <button class="submit-btn" data-action="addFromScan" style="margin-top:14px">Review Schedule →</button>
       <button class="scan-btn" style="margin-top:8px;font-size:13px" data-action="clearScan">Scan Another</button>
     </div>`:""}
@@ -2941,17 +2958,17 @@ function buildConfirmSchedule() {
   ${banner}
 
   <label class="form-label">Medication Name${fieldHint("name")}
-    <input class="form-input" id="cs-name" value="${(c.name||"").replace(/"/g,"&quot;")}"/>
+    <input class="form-input" id="cs-name" value="${escapeHtml(c.name||"")}"/>
   </label>
 
   <label class="form-label">Dose${fieldHint("dose")}
-    <input class="form-input" id="cs-dose" value="${(c.dose||"").replace(/"/g,"&quot;")}"/>
+    <input class="form-input" id="cs-dose" value="${escapeHtml(c.dose||"")}"/>
   </label>
 
   <label class="form-label">For *
     <select class="form-input" id="cs-person">
       ${!c.person?`<option value="" disabled selected>Choose a person or pet...</option>`:""}
-      ${getAllPeople().map(p=>`<option ${c.person===p?"selected":""}>${p}</option>`).join("")}
+      ${getAllPeople().map(p=>`<option ${c.person===p?"selected":""}>${escapeHtml(p)}</option>`).join("")}
     </select>
   </label>
 
@@ -2984,7 +3001,7 @@ function buildConfirmSchedule() {
   </label>
 
   ${c.notes ? `<div class="form-label" style="margin-top:14px">Label Details
-    <div style="background:#1a1208;border-radius:8px;padding:10px;font-size:12px;color:#a89682;line-height:1.6">${c.notes}</div>
+    <div style="background:#1a1208;border-radius:8px;padding:10px;font-size:12px;color:#a89682;line-height:1.6">${escapeHtml(c.notes)}</div>
   </div>` : ""}
 
   <button class="submit-btn" data-action="confirmScheduleSave" style="margin-top:18px">✓ Save & Set Reminders</button>
@@ -3016,13 +3033,13 @@ ${state.pillTab==="imprint"?`
 <div class="scan-card">
   <div style="font-size:13px;color:#d9c7b9;margin-bottom:12px;line-height:1.6">The imprint is the code stamped on the pill. Look for codes like <span style="color:#c9a66b;font-weight:600">L484</span>, <span style="color:#c9a66b;font-weight:600">M365</span>, or <span style="color:#c9a66b;font-weight:600">PLIVA 433</span>.</div>
   <label class="form-label">Imprint Code
-    <input class="form-input" id="pillImprintInput" value="${state.pillImprint}" placeholder="e.g. L484" style="font-size:18px;letter-spacing:.1em;text-transform:uppercase"/>
+    <input class="form-input" id="pillImprintInput" value="${escapeHtml(state.pillImprint)}" placeholder="e.g. L484" style="font-size:18px;letter-spacing:.1em;text-transform:uppercase"/>
   </label>
   <div style="display:flex;gap:8px;margin-top:8px">
     <button class="submit-btn" data-action="identifyByImprint" style="margin-top:0;opacity:${state.pillImprint.trim()?1:.5}">${state.pillLoading?"Identifying…":"🔍 Identify Pill"}</button>
   </div>
 </div>`:``}
-${state.pillError?`<div class="error-box" style="margin-top:12px">⚠️ ${state.pillError}</div>`:""}
+${state.pillError?`<div class="error-box" style="margin-top:12px">⚠️ ${escapeHtml(state.pillError)}</div>`:""}
 ${state.pillResult?buildPillResult():""}`;
 }
 
@@ -3034,20 +3051,20 @@ function buildPillResult() {
   <div class="form-card" style="margin-bottom:12px;border-left:3px solid #c9a66b">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
       <div>
-        <div style="font-size:20px;font-weight:700;color:#f0e6d8">${r.name}</div>
-        ${r.brandName?`<div style="font-size:13px;color:#c9a66b;margin-top:2px">Brand: ${r.brandName}</div>`:""}
+        <div style="font-size:20px;font-weight:700;color:#f0e6d8">${escapeHtml(r.name)}</div>
+        ${r.brandName?`<div style="font-size:13px;color:#c9a66b;margin-top:2px">Brand: ${escapeHtml(r.brandName)}</div>`:""}
       </div>
       <span class="doc-type-badge" style="background:${r.confidence==="high"?"#2a4a34":"#3a3010"};color:${r.confidence==="high"?"#8cc49a":"#c9a66b"}">${r.confidence==="high"?"✓ High":r.confidence==="medium"?"~ Medium":"? Low"}</span>
     </div>
     <div class="pill-grid">
-      ${[["Strength",r.strength],["Shape",r.shape],["Color",r.color],["Imprint",r.imprint],["Category",r.category]].filter(([,v])=>v).map(([k,v])=>`<div class="pill-stat"><div class="pill-stat-label">${k}</div><div class="pill-stat-val">${v}</div></div>`).join("")}
+      ${[["Strength",r.strength],["Shape",r.shape],["Color",r.color],["Imprint",r.imprint],["Category",r.category]].filter(([,v])=>v).map(([k,v])=>`<div class="pill-stat"><div class="pill-stat-label">${k}</div><div class="pill-stat-val">${escapeHtml(v)}</div></div>`).join("")}
     </div>
-    <div style="margin-top:10px;font-size:13px;color:#d9c7b9;line-height:1.7"><span style="color:#c9a66b;font-weight:600">Used for: </span>${r.usedFor}</div>
-    ${r.howItWorks?`<div style="margin-top:6px;font-size:12px;color:#8a7a70;font-style:italic">${r.howItWorks}</div>`:""}
+    <div style="margin-top:10px;font-size:13px;color:#d9c7b9;line-height:1.7"><span style="color:#c9a66b;font-weight:600">Used for: </span>${escapeHtml(r.usedFor)}</div>
+    ${r.howItWorks?`<div style="margin-top:6px;font-size:12px;color:#8a7a70;font-style:italic">${escapeHtml(r.howItWorks)}</div>`:""}
   </div>
-  ${r.commonSideEffects?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">⚠️ Common Side Effects</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${r.commonSideEffects.map(s=>`<span class="tag">${s}</span>`).join("")}</div></div>`:""}
-  ${r.seriousWarnings?.length?`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #c04040"><div class="section-title-sm" style="color:#e8a090">🚨 Serious Warnings</div>${r.seriousWarnings.map(w=>`<div style="font-size:13px;color:#e8c0b0;padding:5px 0;border-bottom:1px solid #2a2018">• ${w}</div>`).join("")}</div>`:""}
-  ${r.interactions?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">⚡ Interactions with Your Meds</div>${r.interactions.map(ix=>`<div class="ix-row"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-weight:600;font-size:14px">${ix.drug}</span><span class="severity-badge" style="background:${sevColor[ix.severity]||"#8cc49a"}22;color:${sevColor[ix.severity]||"#8cc49a"}">${ix.severity}</span></div><div style="font-size:12px;color:#a08a7a">${ix.description}</div></div>`).join("")}</div>`:`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #8cc49a"><div style="font-size:13px;color:#8cc49a">✓ No known interactions with your current medications.</div></div>`}
+  ${r.commonSideEffects?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">⚠️ Common Side Effects</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${r.commonSideEffects.map(s=>`<span class="tag">${escapeHtml(s)}</span>`).join("")}</div></div>`:""}
+  ${r.seriousWarnings?.length?`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #c04040"><div class="section-title-sm" style="color:#e8a090">🚨 Serious Warnings</div>${r.seriousWarnings.map(w=>`<div style="font-size:13px;color:#e8c0b0;padding:5px 0;border-bottom:1px solid #2a2018">• ${escapeHtml(w)}</div>`).join("")}</div>`:""}
+  ${r.interactions?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">⚡ Interactions with Your Meds</div>${r.interactions.map(ix=>`<div class="ix-row"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-weight:600;font-size:14px">${escapeHtml(ix.drug)}</span><span class="severity-badge" style="background:${sevColor[ix.severity]||"#8cc49a"}22;color:${sevColor[ix.severity]||"#8cc49a"}">${escapeHtml(ix.severity)}</span></div><div style="font-size:12px;color:#a08a7a">${escapeHtml(ix.description)}</div></div>`).join("")}</div>`:`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #8cc49a"><div style="font-size:13px;color:#8cc49a">✓ No known interactions with your current medications.</div></div>`}
   <button class="submit-btn" data-action="addPillToMeds">+ Add to My Medications</button>
   <button class="scan-btn" style="margin-top:8px;font-size:13px" data-action="clearPill">Identify Another</button>
   <div class="hint-text" style="margin-top:10px">⚕️ For informational purposes only. Confirm with your pharmacist or doctor.</div>
@@ -3063,40 +3080,40 @@ function buildDocs() {
     return `
 <div class="section-header">
   <button class="back-btn" data-action="clearDocViewing">← Back</button>
-  <span style="font-size:13px">${doc.title}</span>
+  <span style="font-size:13px">${escapeHtml(doc.title)}</span>
 </div>
 <div class="form-card" style="margin-bottom:12px;border-left:3px solid ${getColor(doc.person)}">
   <div style="display:flex;justify-content:space-between;align-items:flex-start">
     <div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:6px">${doc.title}</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:6px">${escapeHtml(doc.title)}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <span class="doc-type-badge">${TYPE_ICONS[doc.type]||"📄"} ${doc.type}</span>
-        ${doc.date?`<span class="doc-type-badge" style="background:#261e16">${doc.date}</span>`:""}
-        <span class="doc-type-badge" style="background:#261e16">📎 ${doc.fileSize}</span>
+        <span class="doc-type-badge">${TYPE_ICONS[doc.type]||"📄"} ${escapeHtml(doc.type)}</span>
+        ${doc.date?`<span class="doc-type-badge" style="background:#261e16">${escapeHtml(doc.date)}</span>`:""}
+        <span class="doc-type-badge" style="background:#261e16">📎 ${escapeHtml(doc.fileSize)}</span>
       </div>
     </div>
     <button class="btn-delete" style="flex:none;padding:6px 12px;font-size:12px;border-radius:10px" data-action="deleteDoc" data-id="${doc.id}">Remove</button>
   </div>
-  <div style="font-size:13px;color:#d9c7b9;margin-top:10px;line-height:1.7;font-style:italic">${doc.summary}</div>
+  <div style="font-size:13px;color:#d9c7b9;margin-top:10px;line-height:1.7;font-style:italic">${escapeHtml(doc.summary)}</div>
 </div>
-${doc.keyValues?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">🔬 Key Values</div>${doc.keyValues.map(kv=>`<div class="lab-row"><span class="lab-label">${kv.label}</span><span class="lab-value ${kv.flag&&kv.flag!=="normal"?"flag-"+kv.flag:""}">${kv.value}${kv.flag==="high"?" ↑":kv.flag==="low"?" ↓":""}</span></div>`).join("")}</div>`:""}
-${doc.diagnoses?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">🏥 Diagnoses</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${doc.diagnoses.map(d=>`<span class="diagnosis-tag">${d}</span>`).join("")}</div></div>`:""}
-${doc.medications?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">💊 Medications Mentioned</div>${doc.medications.map(m=>`<div style="font-size:13px;color:#d9c7b9;padding:5px 0;border-bottom:1px solid #2a2018">• ${m}</div>`).join("")}</div>`:""}
-${doc.followUp?`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #c9a66b"><div class="section-title-sm">📋 Follow-Up</div><div style="font-size:13px;color:#d9c7b9;margin-top:8px;line-height:1.7">${doc.followUp}</div></div>`:""}
-<div class="hint-text">Uploaded ${doc.uploadDate} · ${doc.fileName}</div>`;
+${doc.keyValues?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">🔬 Key Values</div>${doc.keyValues.map(kv=>`<div class="lab-row"><span class="lab-label">${escapeHtml(kv.label)}</span><span class="lab-value ${kv.flag&&kv.flag!=="normal"?"flag-"+escapeHtml(kv.flag):""}">${escapeHtml(kv.value)}${kv.flag==="high"?" ↑":kv.flag==="low"?" ↓":""}</span></div>`).join("")}</div>`:""}
+${doc.diagnoses?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">🏥 Diagnoses</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${doc.diagnoses.map(d=>`<span class="diagnosis-tag">${escapeHtml(d)}</span>`).join("")}</div></div>`:""}
+${doc.medications?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">💊 Medications Mentioned</div>${doc.medications.map(m=>`<div style="font-size:13px;color:#d9c7b9;padding:5px 0;border-bottom:1px solid #2a2018">• ${escapeHtml(m)}</div>`).join("")}</div>`:""}
+${doc.followUp?`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #c9a66b"><div class="section-title-sm">📋 Follow-Up</div><div style="font-size:13px;color:#d9c7b9;margin-top:8px;line-height:1.7">${escapeHtml(doc.followUp)}</div></div>`:""}
+<div class="hint-text">Uploaded ${escapeHtml(doc.uploadDate)} · ${escapeHtml(doc.fileName)}</div>`;
   }
 
   return `
 <div class="section-header"><span>Medical Documents</span></div>
 <div class="inline-picker">
   ${state.people.map(p=>`
-    <button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setDocsPerson" data-person="${p}">
-      <span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span>
+    <button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setDocsPerson" data-person="${escapeHtml(p)}">
+      <span class="avatar" style="background:${getColor(p)}">${escapeHtml(getInitials(p))}</span><span class="person-name-text">${escapeHtml(p)}</span>
       ${state.docs.filter(d=>d.person===p).length>0?`<span class="doc-count">${state.docs.filter(d=>d.person===p).length}</span>`:""}
     </button>`).join("")}
 </div>
 <div class="doc-upload-area">
-  <div class="doc-upload-label">Add document for ${activePerson}</div>
+  <div class="doc-upload-label">Add document for ${escapeHtml(activePerson)}</div>
   <div class="doc-upload-row">
     <label class="doc-upload-btn primary" style="opacity:${state.docUploading?.6:1}">
       <span class="icon">📷</span><span style="font-size:13px">Take Photo</span><span style="font-size:10px;opacity:.7">Best for lab printouts</span>
@@ -3117,16 +3134,16 @@ ${doc.followUp?`<div class="form-card" style="margin-bottom:12px;border-left:3px
   <div style="font-size:11px;color:#7a6a62;text-align:center;margin-top:8px;line-height:1.5">Documents are sent to a third-party AI service (Anthropic) to extract the details, then discarded — only the extracted text is saved.</div>
 </div>
 ${state.docUploading?`<div style="background:#261e16;border-radius:12px;padding:16px;text-align:center;margin-bottom:14px;border:1px solid #c9a66b44"><div style="font-size:28px;margin-bottom:8px">🤖</div><div style="color:#c9a66b;font-weight:600;font-size:14px">Claude is reading the document…</div><div style="color:#8a7a70;font-size:12px;margin-top:4px">Extracting lab values, diagnoses & summary</div></div>`:""}
-${personDocs.length===0&&!state.docUploading?`<div class="empty-state"><div style="font-size:36px;margin-bottom:8px">📂</div>No documents for ${activePerson} yet.</div>`:""}
+${personDocs.length===0&&!state.docUploading?`<div class="empty-state"><div style="font-size:36px;margin-bottom:8px">📂</div>No documents for ${escapeHtml(activePerson)} yet.</div>`:""}
 ${personDocs.map(doc=>`
   <button class="doc-card" style="border-left-color:${getColor(doc.person)}" data-action="viewDoc" data-id="${doc.id}">
     <div style="display:flex;align-items:flex-start;gap:10px">
       <div class="doc-icon">${TYPE_ICONS[doc.type]||"📄"}</div>
       <div style="flex:1;text-align:left">
-        <div style="font-weight:700;font-size:14px;color:#f0e6d8">${doc.title}</div>
-        <div style="font-size:12px;color:#a08a7a;margin-top:2px">${doc.type} · ${doc.uploadDate}</div>
-        <div style="font-size:12px;color:#8a7a70;margin-top:4px">${doc.summary?.slice(0,90)}${doc.summary?.length>90?"…":""}</div>
-        ${doc.keyValues?.some(kv=>kv.flag==="high"||kv.flag==="low")?`<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${doc.keyValues.filter(kv=>kv.flag==="high"||kv.flag==="low").slice(0,3).map(kv=>`<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${FLAG_COLORS[kv.flag]}22;color:${FLAG_COLORS[kv.flag]};font-weight:600">${kv.label} ${kv.flag==="high"?"↑":"↓"}</span>`).join("")}</div>`:""}
+        <div style="font-weight:700;font-size:14px;color:#f0e6d8">${escapeHtml(doc.title)}</div>
+        <div style="font-size:12px;color:#a08a7a;margin-top:2px">${escapeHtml(doc.type)} · ${escapeHtml(doc.uploadDate)}</div>
+        <div style="font-size:12px;color:#8a7a70;margin-top:4px">${escapeHtml(doc.summary?.slice(0,90))}${doc.summary?.length>90?"…":""}</div>
+        ${doc.keyValues?.some(kv=>kv.flag==="high"||kv.flag==="low")?`<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${doc.keyValues.filter(kv=>kv.flag==="high"||kv.flag==="low").slice(0,3).map(kv=>`<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${FLAG_COLORS[kv.flag]}22;color:${FLAG_COLORS[kv.flag]};font-weight:600">${escapeHtml(kv.label)} ${kv.flag==="high"?"↑":"↓"}</span>`).join("")}</div>`:""}
       </div>
       <div style="color:#5a4a43;font-size:18px">›</div>
     </div>
@@ -3146,15 +3163,15 @@ function buildEmergency() {
     return `
 <div class="emergency-header"><div style="font-size:22px">🚨</div><div><div style="font-weight:700;font-size:16px">Emergency Information</div><div style="font-size:11px;opacity:.8;letter-spacing:.1em">SHOW THIS TO FIRST RESPONDERS</div></div></div>
 <div class="inline-picker">
-  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setEmergencyPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span></button>`).join("")}
+  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setEmergencyPerson" data-person="${escapeHtml(p)}"><span class="avatar" style="background:${getColor(p)}">${escapeHtml(getInitials(p))}</span><span class="person-name-text">${escapeHtml(p)}</span></button>`).join("")}
 </div>
 <div class="form-card">
-  <div style="font-size:14px;font-weight:700;margin-bottom:12px">${activePerson} — Edit Emergency Info</div>
+  <div style="font-size:14px;font-weight:700;margin-bottom:12px">${escapeHtml(activePerson)} — Edit Emergency Info</div>
   <div class="form-grid">
     ${[["blood","Blood Type","e.g. O+"],["dob","Date of Birth","e.g. March 15, 1978"],["weight","Weight","e.g. 145 lbs"],["doctor","Primary Doctor","e.g. Dr. Shah"],["doctorPhone","Doctor Phone",""],["emergency","Emergency Contact",""],["emergencyPhone","Emergency Phone",""]].map(([k,label,ph])=>`
-    <label class="form-label">${label}<input class="form-input" id="ef-${k}" value="${ef[k]||""}" placeholder="${ph}"/></label>`).join("")}
-    <label class="form-label full">Allergies (comma separated)<input class="form-input" id="ef-allergies" value="${ef.allergies||""}" placeholder="e.g. Penicillin, Latex"/></label>
-    <label class="form-label full">Medical Conditions<textarea class="form-input" id="ef-conditions">${ef.conditions||""}</textarea></label>
+    <label class="form-label">${label}<input class="form-input" id="ef-${k}" value="${escapeHtml(ef[k]||"")}" placeholder="${ph}"/></label>`).join("")}
+    <label class="form-label full">Allergies (comma separated)<input class="form-input" id="ef-allergies" value="${escapeHtml(ef.allergies||"")}" placeholder="e.g. Penicillin, Latex"/></label>
+    <label class="form-label full">Medical Conditions<textarea class="form-input" id="ef-conditions">${escapeHtml(ef.conditions||"")}</textarea></label>
   </div>
   <div style="display:flex;gap:10px;margin-top:4px">
     <button class="submit-btn" data-action="saveEmergency" style="flex:1">Save</button>
@@ -3166,29 +3183,29 @@ function buildEmergency() {
   return `
 <div class="emergency-header"><div style="font-size:22px">🚨</div><div><div style="font-weight:700;font-size:16px">Emergency Information</div><div style="font-size:11px;opacity:.8;letter-spacing:.1em">SHOW THIS TO FIRST RESPONDERS</div></div></div>
 <div class="inline-picker">
-  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setEmergencyPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span></button>`).join("")}
+  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setEmergencyPerson" data-person="${escapeHtml(p)}"><span class="avatar" style="background:${getColor(p)}">${escapeHtml(getInitials(p))}</span><span class="person-name-text">${escapeHtml(p)}</span></button>`).join("")}
 </div>
 <div class="emergency-card">
   <div class="section-title-sm">Vitals</div>
   <div class="emergency-grid">
-    ${[["🩸 Blood Type",profile.blood],["🎂 Date of Birth",profile.dob],["⚖️ Weight",profile.weight]].map(([k,v])=>`<div class="emergency-stat"><div style="font-size:10px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">${k}</div><div style="font-size:15px;font-weight:700">${v||`<span style="color:#5a4a43">Not set</span>`}</div></div>`).join("")}
+    ${[["🩸 Blood Type",profile.blood],["🎂 Date of Birth",profile.dob],["⚖️ Weight",profile.weight]].map(([k,v])=>`<div class="emergency-stat"><div style="font-size:10px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">${k}</div><div style="font-size:15px;font-weight:700">${v?escapeHtml(v):`<span style="color:#5a4a43">Not set</span>`}</div></div>`).join("")}
   </div>
 </div>
 <div class="emergency-card">
   <div class="section-title-sm">⚠️ Allergies</div>
-  ${profile.allergies?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${profile.allergies.split(",").map(a=>a.trim()).filter(Boolean).map(a=>`<span class="allergy-tag">${a}</span>`).join("")}</div>`:`<div style="color:#5a4a43;font-size:13px;margin-top:6px">No allergies recorded</div>`}
+  ${profile.allergies?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${profile.allergies.split(",").map(a=>a.trim()).filter(Boolean).map(a=>`<span class="allergy-tag">${escapeHtml(a)}</span>`).join("")}</div>`:`<div style="color:#5a4a43;font-size:13px;margin-top:6px">No allergies recorded</div>`}
 </div>
 <div class="emergency-card">
   <div class="section-title-sm">💊 Current Medications</div>
   ${personMeds.length===0?`<div style="color:#5a4a43;font-size:13px;margin-top:6px">No medications on file</div>`:""}
-  ${personMeds.map(m=>`<div class="emergency-med-row"><div class="med-dot" style="background:${getColor(m.person)};margin-top:4px"></div><div><div style="font-weight:600;font-size:14px">${m.name} · ${m.dose}</div><div style="color:#a08a7a;font-size:12px">${m.frequency}</div></div></div>`).join("")}
+  ${personMeds.map(m=>`<div class="emergency-med-row"><div class="med-dot" style="background:${getColor(m.person)};margin-top:4px"></div><div><div style="font-weight:600;font-size:14px">${escapeHtml(m.name)} · ${escapeHtml(m.dose)}</div><div style="color:#a08a7a;font-size:12px">${escapeHtml(m.frequency)}</div></div></div>`).join("")}
 </div>
-${profile.conditions?`<div class="emergency-card"><div class="section-title-sm">🏥 Medical Conditions</div><div style="font-size:13px;color:#d9c7b9;margin-top:6px;line-height:1.6">${profile.conditions}</div></div>`:""}
+${profile.conditions?`<div class="emergency-card"><div class="section-title-sm">🏥 Medical Conditions</div><div style="font-size:13px;color:#d9c7b9;margin-top:6px;line-height:1.6">${escapeHtml(profile.conditions)}</div></div>`:""}
 <div class="emergency-card">
   <div class="section-title-sm">📞 Contacts</div>
-  ${[["Primary Doctor",profile.doctor,profile.doctorPhone],["Emergency Contact",profile.emergency,profile.emergencyPhone]].map(([label,name,phone])=>`<div style="margin-top:8px"><div style="font-size:11px;color:#8a7a70;text-transform:uppercase;letter-spacing:.05em">${label}</div><div style="font-size:14px;font-weight:600">${name||`<span style="color:#5a4a43">Not set</span>`}</div>${phone?`<div style="font-size:13px;color:#c9a66b">${phone}</div>`:""}</div>`).join("")}
+  ${[["Primary Doctor",profile.doctor,profile.doctorPhone],["Emergency Contact",profile.emergency,profile.emergencyPhone]].map(([label,name,phone])=>`<div style="margin-top:8px"><div style="font-size:11px;color:#8a7a70;text-transform:uppercase;letter-spacing:.05em">${label}</div><div style="font-size:14px;font-weight:600">${name?escapeHtml(name):`<span style="color:#5a4a43">Not set</span>`}</div>${phone?`<div style="font-size:13px;color:#c9a66b">${escapeHtml(phone)}</div>`:""}</div>`).join("")}
 </div>
-<button class="add-btn" style="width:100%;padding:12px;border-radius:12px;font-size:14px;margin-top:4px" data-action="startEditEmergency">✏️ Edit ${activePerson}'s Info</button>`;
+<button class="add-btn" style="width:100%;padding:12px;border-radius:12px;font-size:14px;margin-top:4px" data-action="startEditEmergency">✏️ Edit ${escapeHtml(activePerson)}'s Info</button>`;
 }
 
 function buildReport(filtered) {
@@ -3204,7 +3221,7 @@ function buildReport(filtered) {
   <div style="font-size:28px" class="no-print">📊</div>
 </div>
 <div class="inline-picker no-print">
-  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setReportPerson" data-person="${p}"><span class="avatar" style="background:${getColor(p)}">${getInitials(p)}</span><span class="person-name-text">${p}</span></button>`).join("")}
+  ${state.people.map(p=>`<button class="person-btn ${activePerson===p?"active":""}" style="${activePerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="setReportPerson" data-person="${escapeHtml(p)}"><span class="avatar" style="background:${getColor(p)}">${escapeHtml(getInitials(p))}</span><span class="person-name-text">${escapeHtml(p)}</span></button>`).join("")}
 </div>
 <div class="range-btns no-print">
   ${[["7","7 Days"],["30","30 Days"],["90","90 Days"]].map(([v,l])=>`<button class="range-btn ${state.reportRange===v?"active":""}" data-action="setReportRange" data-range="${v}">${l}</button>`).join("")}
@@ -3217,7 +3234,7 @@ function buildReport(filtered) {
   <div class="stat-card" style="border-color:#8c9e7a"><div class="stat-num" style="color:${adherencePct>=80?"#8cc49a":"#e8a090"}">${adherencePct}%</div><div class="stat-label">Adherence</div></div>
 </div>
 <div class="progress-card">
-  <div class="progress-label"><span>Overall — ${activePerson}</span><span style="color:${adherencePct>=80?"#8cc49a":"#e8a090"};font-weight:700">${adherencePct}%</span></div>
+  <div class="progress-label"><span>Overall — ${escapeHtml(activePerson)}</span><span style="color:${adherencePct>=80?"#8cc49a":"#e8a090"};font-weight:700">${adherencePct}%</span></div>
   <div class="progress-track"><div class="progress-fill" style="width:${adherencePct}%;background:${adherencePct>=80?"linear-gradient(90deg,#8c9e7a,#adc49a)":"linear-gradient(90deg,#c9a66b,#e8c87a)"}"></div></div>
 </div>
 <div class="form-card" style="margin-bottom:14px">
@@ -3225,13 +3242,13 @@ function buildReport(filtered) {
   ${personMeds.length===0?`<div style="color:#5a4a43;font-size:13px">No medications on file</div>`:""}
   ${personMeds.map(med=>{
     const takenToday=isTakenToday(med); const pct2=takenToday?100:0; const c=getColor(med.person);
-    return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px"><span style="font-weight:600">${med.name} <span style="color:#8a7a70;font-weight:400">· ${med.dose}</span></span><span style="color:${c};font-weight:700">${pct2}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct2}%;background:${c}"></div></div><div style="font-size:11px;color:#8a7a70;margin-top:3px">${med.frequency} · ${takenToday?"✓ Taken today":"⏳ Pending today"}</div></div>`;
+    return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px"><span style="font-weight:600">${escapeHtml(med.name)} <span style="color:#8a7a70;font-weight:400">· ${escapeHtml(med.dose)}</span></span><span style="color:${c};font-weight:700">${pct2}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct2}%;background:${c}"></div></div><div style="font-size:11px;color:#8a7a70;margin-top:3px">${escapeHtml(med.frequency)} · ${takenToday?"✓ Taken today":"⏳ Pending today"}</div></div>`;
   }).join("")}
 </div>
 <div class="form-card">
   <div style="font-weight:700;font-size:14px;margin-bottom:8px">📝 Notes for Provider</div>
-  <div style="font-size:13px;color:#d9c7b9;line-height:1.7">${adherencePct>=90?`${activePerson} shows excellent medication adherence at ${adherencePct}%. No concerns noted.`:adherencePct>=70?`${activePerson} shows good overall adherence at ${adherencePct}%. Some missed doses recorded.`:`${activePerson}'s adherence rate of ${adherencePct}% is below target. Consider discussing barriers at next visit.`}</div>
-  ${ep.allergies?`<div style="margin-top:10px;padding:8px 10px;background:#3a1a14;border-radius:8px;font-size:12px;color:#e8a090">⚠️ Allergies on file: ${ep.allergies}</div>`:""}
+  <div style="font-size:13px;color:#d9c7b9;line-height:1.7">${adherencePct>=90?`${escapeHtml(activePerson)} shows excellent medication adherence at ${adherencePct}%. No concerns noted.`:adherencePct>=70?`${escapeHtml(activePerson)} shows good overall adherence at ${adherencePct}%. Some missed doses recorded.`:`${escapeHtml(activePerson)}'s adherence rate of ${adherencePct}% is below target. Consider discussing barriers at next visit.`}</div>
+  ${ep.allergies?`<div style="margin-top:10px;padding:8px 10px;background:#3a1a14;border-radius:8px;font-size:12px;color:#e8a090">⚠️ Allergies on file: ${escapeHtml(ep.allergies)}</div>`:""}
 </div>
 </div>
 
@@ -3240,13 +3257,13 @@ function buildReport(filtered) {
   <div style="font-size:12px;color:#a0896e;margin-bottom:12px">Everyone below shares the same live medication list, on any device.</div>
   ${state.editingDisplayName ? `
     <div style="display:flex;gap:6px;margin-bottom:12px">
-      <input id="displayNameInput" value="${state.displayNameInput}" placeholder="Your name..." style="flex:1;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8"/>
+      <input id="displayNameInput" value="${escapeHtml(state.displayNameInput)}" placeholder="Your name..." style="flex:1;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8"/>
       <button data-action="saveDisplayName" style="background:#c9a66b;color:#1e1610;border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer">✓</button>
       <button data-action="cancelEditDisplayName" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer">×</button>
     </div>
   ` : `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;font-size:12px;color:#a0896e">
-      <span>Your name (shown to others): <strong style="color:#d9c7b9">${((state.householdRoster||[]).find(r=>r.user_id===state.currentUserId)||{}).display_name || "Not set"}</strong></span>
+      <span>Your name (shown to others): <strong style="color:#d9c7b9">${escapeHtml(((state.householdRoster||[]).find(r=>r.user_id===state.currentUserId)||{}).display_name) || "Not set"}</strong></span>
       <button data-action="showEditDisplayName" style="background:none;border:none;color:#c9a66b;font-size:12px;cursor:pointer;text-decoration:underline">Edit</button>
     </div>
   `}
@@ -3265,16 +3282,16 @@ function buildReport(filtered) {
     const isEditingName = fm && state.editingFamilyMemberId === fm.id;
     if (isEditingName) {
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0">
-        <span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px;flex-shrink:0">${getInitials(p)}</span>
-        <input id="familyMemberNameInput" value="${state.familyMemberNameInput}" style="flex:1;min-width:0;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 8px;font-size:13px;color:#f0e6d8"/>
+        <span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px;flex-shrink:0">${escapeHtml(getInitials(p))}</span>
+        <input id="familyMemberNameInput" value="${escapeHtml(state.familyMemberNameInput)}" style="flex:1;min-width:0;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 8px;font-size:13px;color:#f0e6d8"/>
         <button data-action="saveFamilyMemberName" data-fm-id="${fm.id}" style="background:#c9a66b;color:#1e1610;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0">✓</button>
         <button data-action="cancelEditFamilyMemberName" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0">×</button>
       </div>`;
     }
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0">
       <div style="display:flex;align-items:center;gap:8px">
-        <span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px">${getInitials(p)}</span>
-        <div><div style="font-size:13px">${p} ${fm?`<button data-action="showEditFamilyMemberName" data-fm-id="${fm.id}" title="Rename" style="background:none;border:none;color:#a0896e;font-size:11px;cursor:pointer;padding:0">✎</button>`:""}</div><div style="font-size:11px;color:#a0896e">${status}</div></div>
+        <span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px">${escapeHtml(getInitials(p))}</span>
+        <div><div style="font-size:13px">${escapeHtml(p)} ${fm?`<button data-action="showEditFamilyMemberName" data-fm-id="${fm.id}" title="Rename" style="background:none;border:none;color:#a0896e;font-size:11px;cursor:pointer;padding:0">✎</button>`:""}</div><div style="font-size:11px;color:#a0896e">${status}</div></div>
       </div>
       ${fm?`<select data-caregiver-select data-fm-id="${fm.id}" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:6px 8px;font-size:12px;cursor:pointer;flex-shrink:0">
         <option value="" disabled ${!fm.caregiver_user_id?"selected":""}>Assign to...</option>
@@ -3285,7 +3302,7 @@ function buildReport(filtered) {
   ${state.inviteCode?`
     <div style="margin-top:12px;padding:12px;background:#1e1610;border-radius:10px;border:1px solid rgba(201,166,107,0.25);text-align:center">
       <div style="font-size:11px;color:#a0896e;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Invite code</div>
-      <div style="font-size:22px;font-weight:700;letter-spacing:.15em;color:#f0e6d8;font-family:Georgia,serif">${state.inviteCode}</div>
+      <div style="font-size:22px;font-weight:700;letter-spacing:.15em;color:#f0e6d8;font-family:Georgia,serif">${escapeHtml(state.inviteCode)}</div>
       <button data-action="copyInviteLink" style="margin-top:10px;background:#c9a66b;color:#1a1008;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">🔗 Copy Invite Link</button>
       <div style="font-size:11px;color:#a0896e;margin-top:8px;line-height:1.5">Send them the link — it fills in this code for them automatically. They'll still need this beta's access code and to set up their own login; this code alone doesn't get them in.</div>
     </div>
@@ -3302,7 +3319,7 @@ function buildReport(filtered) {
   <div style="margin-top:16px;padding-top:16px;border-top:1px solid #3a2e24">
     ${state.showDeleteAccountConfirm ? `
       <div style="font-size:12px;color:#e8a090;line-height:1.6;margin-bottom:10px">This permanently deletes your account and, if you're the only member of your household, all its medications, history, and documents. This cannot be undone.</div>
-      <input id="deleteAccountConfirmInput" value="${state.deleteAccountConfirmInput}" placeholder='Type "DELETE" to confirm' style="width:100%;box-sizing:border-box;background:#1e1610;border:1px solid #7a2a20;border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8;margin-bottom:10px;text-align:center"/>
+      <input id="deleteAccountConfirmInput" value="${escapeHtml(state.deleteAccountConfirmInput)}" placeholder='Type "DELETE" to confirm' style="width:100%;box-sizing:border-box;background:#1e1610;border:1px solid #7a2a20;border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8;margin-bottom:10px;text-align:center"/>
       <div style="display:flex;gap:8px">
         <button data-action="cancelDeleteAccount" style="flex:1;background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px;font-size:13px;font-family:Georgia,serif;cursor:pointer">Cancel</button>
         <button data-action="confirmDeleteAccount" ${state.deletingAccount?"disabled":""} style="flex:1;background:#7a2a20;color:#f0d8d0;border:1px solid #a03a2a;border-radius:10px;padding:10px;font-size:13px;font-family:Georgia,serif;cursor:pointer;opacity:${state.deletingAccount?0.6:1}">${state.deletingAccount?"Deleting...":"Permanently Delete"}</button>
@@ -3389,7 +3406,7 @@ ${weekDays.map((d,i)=>{
       ${isT?`<span class="today-badge">Today</span>`:""}
     </div>
     ${dayMeds.length===0?`<div style="color:#7a6a62;font-size:13px;padding:4px 0">No scheduled medications</div>`:""}
-    ${dayMeds.map(med=>`<div class="schedule-med-row"><div style="width:8px;height:8px;border-radius:50%;background:${getColor(med.person)};flex-shrink:0"></div><div><div style="font-weight:600;font-size:14px">${med.name} · ${med.dose}</div><div style="color:#d9c7b9;font-size:12px">${med.time} · ${med.person}</div></div>${isT&&isTakenToday(med)?`<span class="taken-badge" style="margin-left:auto">✓</span>`:""}</div>`).join("")}
+    ${dayMeds.map(med=>`<div class="schedule-med-row"><div style="width:8px;height:8px;border-radius:50%;background:${getColor(med.person)};flex-shrink:0"></div><div><div style="font-weight:600;font-size:14px">${escapeHtml(med.name)} · ${escapeHtml(med.dose)}</div><div style="color:#d9c7b9;font-size:12px">${escapeHtml(med.time)} · ${escapeHtml(med.person)}</div></div>${isT&&isTakenToday(med)?`<span class="taken-badge" style="margin-left:auto">✓</span>`:""}</div>`).join("")}
   </div>`;
 }).join("")}`;
 }
