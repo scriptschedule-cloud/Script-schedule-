@@ -4,6 +4,7 @@
   "private": true,
   "description": "Capacitor native shell for the ScriptSchedule web app (index.html). The web app itself has no build step; www/ is a plain copy of the static files that ship inside the native app.",
   "scripts": {
+    "test": "node --test",
     "sync-www": "cp index.html privacy.html manifest.json sw.js favicon.ico icon-152.png icon-167.png icon-180.png icon-192.png icon-512.png www/",
     "cap:sync": "npm run sync-www && npx cap sync"
   },

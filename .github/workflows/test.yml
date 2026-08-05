@@ -1,0 +1,25 @@
+name: Tests
+
+# Runs the automated test suite on every push and pull request against main.
+# This is the first CI wired up for this repo — previously there was none at
+# all. Uses GitHub Actions' free tier (no cost: public repos get unlimited
+# minutes, private repos get a monthly free allowance far beyond what a
+# suite this small will ever use). Does not affect Netlify's own deploy,
+# which is a separate, unrelated pipeline.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm test

@@ -58,9 +58,10 @@ Each issue lists: what it is, where it lives, why it matters, what happens if it
 - **Where:** whole repo — confirmed no test files, no test framework config, no `.github/workflows`, no CI config of any kind.
 - **Why it matters:** for a medication-safety app, scheduling logic, dose-status logic, and RLS access rules currently have no regression protection at all. Every fix (including everything done this session) is verified manually, once, and can silently regress later with no warning.
 - **If not addressed:** future changes (including well-intentioned ones) can reintroduce fixed bugs — including the XSS fix, the timezone bug above, or RLS gaps — with nothing to catch it before real users see it.
-- **Recommended fix:** start with a small, high-value set: unit tests for the dose-status/scheduling helpers (`isPastCourse`, `toPushPayload`, frequency-to-schedule mapping) and RLS policy tests (can user A read/write user B's household data — should always fail). This is Phase 16 scope; flagged here because of how much weight the app currently rests on zero verification.
-- **Could affect existing features:** No — pure addition, no behavior change.
-- **How to test:** N/A — this *is* the testing work.
+- **Status: started, not fully closed.** Added a real test suite (`tests/time.test.js`, 15 tests, using Node's built-in `node:test` — no new dependency) covering the timezone-conversion logic from the C3 fix: every timezone/DST/edge case verified earlier by hand is now a permanent, automated regression test (`npm test`, or `node --test`). Extracted the logic itself into `netlify/functions/_shared/time.js` so it's testable in isolation from the HTTP handler. Wired up `.github/workflows/test.yml` — first CI this repo has ever had, runs the suite on every push/PR to `main` (free on GitHub Actions' tier for a suite this size).
+  - **What's still not covered** and remains open: the client-side dose-status/scheduling helpers in `index.html` (`isPastCourse`, frequency-to-schedule mapping, `toPushPayload`), and RLS policy tests (verifying user A genuinely cannot read/write user B's household data via a direct request) — the latter needs a real Supabase test project to run against, which is a bigger lift than adding to this pass.
+- **Could affect existing features:** No — pure addition; `schedule-push.js`'s behavior is unchanged, only where the helper functions live moved.
+- **How to test:** `npm test` locally, or check the Actions tab on GitHub after any push.
 
 ---
 

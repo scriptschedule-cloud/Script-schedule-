@@ -5,7 +5,7 @@ Running log of open issues. Full detail (why it matters, recommended fix, test p
 ## Open — Critical
 
 - **C1** — Native app: decision made (Capacitor) and scaffolding committed (`4658c90`). Blocked on local tooling: iOS needs full Xcode.app installed (only CLT present), Android needs a JDK installed (none present). Not a code issue — install both, then `npx cap open ios` / `npx cap open android`.
-- **C4** — Zero automated tests, zero CI.
+- **C4** — Started, not fully closed: real tests + CI now exist (`tests/time.test.js`, `.github/workflows/test.yml`), covering the C3 timezone fix. Still open: dose-status/scheduling client-side logic, and RLS policy tests (needs a test Supabase project).
 
 ## Open — High
 

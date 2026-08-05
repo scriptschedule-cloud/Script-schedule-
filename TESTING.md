@@ -1,8 +1,15 @@
 # ScriptSchedule — Testing
 
-## Current state: no automated tests exist
+## Current state: a real (but partial) automated suite now exists
 
-Verified — no test files, no test framework config (Jest/Vitest/Playwright/Cypress), no CI pipeline anywhere in this repo. Every fix made to this app, including everything done this session, has been verified manually and once. See [PRODUCTION_READINESS_AUDIT.md](PRODUCTION_READINESS_AUDIT.md) C4 for why this matters for a medication-safety app.
+`tests/time.test.js` — 15 tests covering the timezone-conversion logic behind medication reminder scheduling (`netlify/functions/_shared/time.js`): multiple IANA zones, both 2026 US DST transition dates, half-hour-offset and southern-hemisphere zones, midnight edge cases, and calendar arithmetic across month/year boundaries. Run with `npm test` (uses Node's built-in `node:test` — no external framework dependency). `.github/workflows/test.yml` runs this on every push/PR to `main` — the first CI this repo has had.
+
+**Still not covered** — real gaps, not yet addressed:
+- Client-side dose-status/scheduling logic in `index.html` (`isPastCourse`, frequency-to-schedule mapping, `toPushPayload`).
+- RLS policy tests (confirming user A genuinely cannot read/write user B's household data) — needs a dedicated test Supabase project to run against safely, which is more setup than a pure unit test.
+- Everything else in this file's "manual launch-testing checklist" below.
+
+Every other fix made to this app (XSS, auth/rate-limiting, session control, dead-file cleanup) has been verified manually and once, with no permanent regression protection. See [PRODUCTION_READINESS_AUDIT.md](PRODUCTION_READINESS_AUDIT.md) C4 for the full picture.
 
 ## How things have been manually verified so far
 
