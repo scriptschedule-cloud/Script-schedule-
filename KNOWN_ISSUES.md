@@ -5,7 +5,7 @@ Running log of open issues. Full detail (why it matters, recommended fix, test p
 ## Open — Critical
 
 - **C1** — Native app: decision made (Capacitor) and scaffolding committed (`4658c90`). Blocked on local tooling: iOS needs full Xcode.app installed (only CLT present), Android needs a JDK installed (none present). Not a code issue — install both, then `npx cap open ios` / `npx cap open android`.
-- **C4** — Started, not fully closed: real tests + CI now exist (`tests/time.test.js`, `.github/workflows/test.yml`), covering the C3 timezone fix. Still open: dose-status/scheduling client-side logic, and RLS policy tests (needs a test Supabase project).
+- **C4** — Further progress: `tests/scheduling.test.js` now covers the client-side scheduling helpers (`courseEndDate`, `isPastCourse`, `isArchived`, `doseKey`) extracted directly from the real `index.html` source. 28/28 tests passing. Still open: RLS policy tests (needs a dedicated test Supabase project — bigger lift, not done).
 
 ## Open — High
 
