@@ -122,7 +122,7 @@ Each issue lists: what it is, where it lives, why it matters, what happens if it
 - **Performance of the single-file render model** — every state change re-renders the entire app via one `innerHTML` string rebuild. Not yet measured against a large medication history or multi-profile household; worth a real performance pass (Phase 12) before assuming it's fine at scale.
 - **No pagination on dose history** — `dose_events` will grow unbounded per household with no querying limits observed in the client code reviewed so far.
 - **Offline behavior unverified** — Supabase writes attempted while offline haven't been traced through to confirm what the user sees (silent failure vs. clear error); needs a dedicated pass (Phase 10).
-- **Accessibility unaudited** — no screen-reader/contrast/touch-target review has been done yet (Phase 13 scope).
+- **Accessibility — started, not fully audited.** Fixed the concrete, verifiable gap: every icon-only button and every input missing an accessible name now has one (`aria-label`), confirmed via the browser's actual accessibility tree, no visual change. **Still not done** — real screen-reader testing (VoiceOver/TalkBack), color-contrast measurement, touch-target sizing, dynamic text scaling, and keyboard-navigation flow are all still unstarted; none of those can be verified by reading code alone.
 
 ## LOW
 
