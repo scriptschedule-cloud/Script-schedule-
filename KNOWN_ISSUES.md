@@ -36,6 +36,10 @@ See the audit's Medium/Low sections — representative, not yet an exhaustive sw
 - Added "Sign Out of Other Devices," verified against the live Supabase backend.
 - Medication history is archived instead of hard-deleted when a medication is removed.
 
+## Backlog / feature ideas (not scoped or started)
+
+- **Over-the-counter (OTC) medication reminders** — requested 2026-08-06. Not yet scoped: needs a decision on whether OTC meds are just a regular medication entry with a flag, or need their own simpler add-flow (no prescription/pharmacy/refill fields), and whether "as-needed" OTC use (e.g. ibuprofen when needed) should get different reminder/logging treatment than a scheduled prescription. Revisit and scope properly before building.
+
 ## How to use this file
 
 When a new issue is found, add it here with a one-line summary and a link/reference to the fuller writeup (audit doc, or inline if small). When something is fixed, move it to "Resolved" with the date and a one-line note on how it was verified — not just "fixed."

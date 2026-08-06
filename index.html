@@ -380,7 +380,24 @@ textarea.form-input{min-height:72px;resize:vertical}
         <input type="password" id="bg-signin-password" class="bg-input" placeholder="Password" autocomplete="current-password"/>
         <button class="bg-btn" id="bg-signin-btn">Sign In</button>
         <div class="bg-error" id="bg-signin-error"></div>
+        <div class="bg-footer" style="margin-top:6px"><a href="#" id="bg-forgot-toggle">Forgot password?</a></div>
+        <div id="bg-forgot-panel" style="display:none;margin-top:10px">
+          <input type="email" id="bg-forgot-email" class="bg-input" placeholder="Email address" autocomplete="email"/>
+          <button class="bg-btn" id="bg-forgot-btn">Send Reset Link</button>
+          <div class="bg-error" id="bg-forgot-error"></div>
+          <div class="bg-footer" id="bg-forgot-success" style="display:none;color:#8fbf8a">✓ Check your email for a reset link.</div>
+        </div>
       </div>
+    </div>
+
+    <!-- STEP: Set new password (shown after clicking a password-reset email link) -->
+    <div id="bg-step-recovery" style="display:none">
+      <div class="bg-title">Set a New Password</div>
+      <div class="bg-sub">Choose a new password for your account</div>
+      <input type="password" id="bg-recovery-password" class="bg-input" placeholder="New password (6+ characters)" autocomplete="new-password"/>
+      <input type="password" id="bg-recovery-password-confirm" class="bg-input" placeholder="Confirm new password" autocomplete="new-password"/>
+      <button class="bg-btn" id="bg-recovery-btn">Set New Password</button>
+      <div class="bg-error" id="bg-recovery-error"></div>
     </div>
 
     <!-- STEP 2: Name + Email -->
@@ -579,6 +596,14 @@ function setState(updates) { Object.assign(state, updates); render(); }
 const SUPABASE_URL = "https://txaezqhbtjbtbxwlveoq.supabase.co";
 const SUPABASE_KEY = "sb_publishable_DMnbXfeIUUEFf3OICUE-fA_N3gfZZcw";
 const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Supabase's client auto-detects a recovery token in the URL (a click from
+// a password-reset email) and fires this event once it's exchanged the
+// token for a real (temporary, reset-only) session — no manual URL parsing
+// needed. Show the "set a new password" screen when it happens.
+sbClient.auth.onAuthStateChange((event) => {
+  if (event === "PASSWORD_RECOVERY") showRecoveryScreen();
+});
 
 // Cloud sync state — populated once a household is known (see realInit()).
 // householdId lives only in memory (the old ss:household_id localStorage key
@@ -1067,6 +1092,91 @@ async function signInExisting() {
 
   if (error) {
     errorEl.textContent = "Couldn't sign in — check your email and password.";
+    return;
+  }
+
+  document.getElementById("beta-gate").classList.remove("show");
+  document.getElementById("beta-gate").style.display = "none";
+  document.getElementById("loading").style.display = "flex";
+  setTimeout(realInit, 250);
+}
+
+// Sends a password-reset email. redirectTo is explicit (not left to
+// Supabase's dashboard-configured default) so this keeps working correctly
+// even if that setting is ever wrong again — as it was found to be earlier,
+// pointed at localhost instead of the real site.
+async function sendPasswordReset() {
+  const emailEl = document.getElementById("bg-forgot-email");
+  const errorEl = document.getElementById("bg-forgot-error");
+  const successEl = document.getElementById("bg-forgot-success");
+  const btn = document.getElementById("bg-forgot-btn");
+  const email = (emailEl.value || "").trim();
+
+  if (!email) {
+    errorEl.textContent = "Enter your email address.";
+    successEl.style.display = "none";
+    return;
+  }
+  errorEl.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "Sending...";
+
+  const { error } = await sbClient.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin
+  });
+
+  btn.disabled = false;
+  btn.textContent = "Send Reset Link";
+
+  if (error) {
+    errorEl.textContent = "Couldn't send the reset email — try again in a moment.";
+    return;
+  }
+  successEl.style.display = "block";
+}
+
+// Shown when Supabase's client detects a password-recovery link was just
+// clicked (see the onAuthStateChange listener near sbClient's init) — swaps
+// the beta-gate overlay to just the "set new password" step, hiding
+// whatever else was showing (beta code entry, sign-in form, etc).
+function showRecoveryScreen() {
+  document.getElementById("beta-gate").classList.add("show");
+  document.getElementById("beta-gate").style.display = "flex";
+  document.getElementById("loading").style.display = "none";
+  ["bg-step-code", "bg-step-info", "bg-step-role"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  document.getElementById("bg-step-recovery").style.display = "block";
+}
+
+async function setNewPassword() {
+  const passwordEl = document.getElementById("bg-recovery-password");
+  const confirmEl = document.getElementById("bg-recovery-password-confirm");
+  const errorEl = document.getElementById("bg-recovery-error");
+  const btn = document.getElementById("bg-recovery-btn");
+  const password = passwordEl.value || "";
+  const confirm = confirmEl.value || "";
+
+  if (password.length < 6) {
+    errorEl.textContent = "Password must be at least 6 characters.";
+    return;
+  }
+  if (password !== confirm) {
+    errorEl.textContent = "Passwords don't match.";
+    return;
+  }
+  errorEl.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+
+  const { error } = await sbClient.auth.updateUser({ password });
+
+  btn.disabled = false;
+  btn.textContent = "Set New Password";
+
+  if (error) {
+    errorEl.textContent = "Couldn't update your password — try again.";
     return;
   }
 
@@ -3731,6 +3841,28 @@ window.addEventListener("load", function() {
   });
   if (signinBtn) signinBtn.addEventListener("click", signInExisting);
   if (signinPassword) signinPassword.addEventListener("keydown", e => { if(e.key==="Enter") signInExisting(); });
+
+  // Wire forgot-password toggle + button
+  const forgotToggle = document.getElementById("bg-forgot-toggle");
+  const forgotPanel = document.getElementById("bg-forgot-panel");
+  const forgotBtn = document.getElementById("bg-forgot-btn");
+  const forgotEmail = document.getElementById("bg-forgot-email");
+  if (forgotToggle) forgotToggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    forgotPanel.style.display = forgotPanel.style.display === "none" ? "block" : "none";
+    // Carry over whatever email they'd already typed into the sign-in form
+    const signinEmailEl = document.getElementById("bg-signin-email");
+    if (forgotEmail && !forgotEmail.value && signinEmailEl) forgotEmail.value = signinEmailEl.value;
+  });
+  if (forgotBtn) forgotBtn.addEventListener("click", sendPasswordReset);
+  if (forgotEmail) forgotEmail.addEventListener("keydown", e => { if(e.key==="Enter") sendPasswordReset(); });
+
+  // Wire the "set new password" recovery screen
+  const recoveryBtn = document.getElementById("bg-recovery-btn");
+  const recoveryConfirm = document.getElementById("bg-recovery-password-confirm");
+  if (recoveryBtn) recoveryBtn.addEventListener("click", setNewPassword);
+  if (recoveryConfirm) recoveryConfirm.addEventListener("keydown", e => { if(e.key==="Enter") setNewPassword(); });
+
   if (nameInput) nameInput.addEventListener("keydown", e => { if(e.key==="Enter") emailInput.focus(); });
   if (emailInput) emailInput.addEventListener("keydown", e => { if(e.key==="Enter") submitBetaInfo(); });
 
