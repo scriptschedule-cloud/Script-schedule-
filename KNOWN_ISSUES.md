@@ -16,10 +16,11 @@ Running log of open issues. Full detail (why it matters, recommended fix, test p
 
 ## Open — Medium / Low
 
-See the audit's Medium/Low sections — representative, not yet an exhaustive sweep (offline behavior, pagination, performance at scale still need a dedicated pass). Data export and the concrete part of accessibility (labeling) are done — see Resolved below; real screen-reader/contrast/touch-target testing for accessibility remains unstarted.
+See the audit's Medium/Low sections — representative, not yet an exhaustive sweep (pagination, performance at scale still need a dedicated pass). Data export, offline write-failure handling, and the concrete part of accessibility (labeling) are done — see Resolved below; real screen-reader/contrast/touch-target testing for accessibility remains unstarted.
 
 ## Resolved this session (for the record)
 
+- **Silent write failures on offline/network errors** — real reliability gap found while investigating "offline behavior unverified": every write in the app went through `cloudUpsert`/`cloudDelete`, which swallowed failures to a console.warn only. A dose marked "taken" while offline looked successful with no indication it never reached the cloud. Fixed: real toast on every write failure, plus a proactive online/offline banner. Verified in the browser with real dispatched events and a forced failure.
 - **Accessibility (labeling)** — every icon-only button and previously-unlabeled input now has an `aria-label`; verified zero remain via a full re-scan and confirmed correct via the browser's actual accessibility tree. Real screen-reader/contrast/touch-target testing is a separate, still-unstarted piece.
 - **Data export** — "Export My Data" in App Settings downloads a single JSON file with everything in the household (medications, dose history, family members, emergency profiles, document details). Requested in the original spec, never built until now. Verified in the browser: payload structure and the actual download mechanism.
 - **H7** — Added self-service "Forgot password?" flow: sign-in form now has a working reset-request link, plus a "set new password" screen that appears automatically when a reset-email link is clicked (via Supabase's `PASSWORD_RECOVERY` auth event). Verified in the browser: toggle wiring, the real `resetPasswordForEmail` API call, loading/error/success states, the recovery screen, and both client-side validation branches.
