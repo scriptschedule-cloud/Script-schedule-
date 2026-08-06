@@ -369,20 +369,20 @@ textarea.form-input{min-height:72px;resize:vertical}
       <div class="bg-title">Welcome to the Beta</div>
       <div class="bg-sub">ScriptSchedule</div>
       <div class="bg-text">You're one of the first to try it. Enter the beta access code to get started — this is the same code for everyone testing the beta, not specific to your family.</div>
-      <input type="text" id="bg-code" class="bg-input" placeholder="Beta access code" autocomplete="off" autocapitalize="none"/>
+      <input type="text" id="bg-code" class="bg-input" placeholder="Beta access code" aria-label="Beta access code" autocomplete="off" autocapitalize="none"/>
       <button class="bg-btn" id="bg-code-btn">Continue</button>
       <div class="bg-error" id="bg-code-error"></div>
       <div class="bg-footer">Don't have a code? Reach out to Cynthia.</div>
       <div class="bg-footer" style="opacity:.75">(Joining a family member's household? You'll still need this beta code first — their invite code comes on the next screen.)</div>
       <div class="bg-footer"><a href="#" id="bg-signin-toggle">Already have an account? Sign in</a></div>
       <div id="bg-signin-panel" style="display:none;margin-top:14px">
-        <input type="email" id="bg-signin-email" class="bg-input" placeholder="Email address" autocomplete="email"/>
-        <input type="password" id="bg-signin-password" class="bg-input" placeholder="Password" autocomplete="current-password"/>
+        <input type="email" id="bg-signin-email" class="bg-input" placeholder="Email address" aria-label="Email address" autocomplete="email"/>
+        <input type="password" id="bg-signin-password" class="bg-input" placeholder="Password" aria-label="Password" autocomplete="current-password"/>
         <button class="bg-btn" id="bg-signin-btn">Sign In</button>
         <div class="bg-error" id="bg-signin-error"></div>
         <div class="bg-footer" style="margin-top:6px"><a href="#" id="bg-forgot-toggle">Forgot password?</a></div>
         <div id="bg-forgot-panel" style="display:none;margin-top:10px">
-          <input type="email" id="bg-forgot-email" class="bg-input" placeholder="Email address" autocomplete="email"/>
+          <input type="email" id="bg-forgot-email" class="bg-input" placeholder="Email address" aria-label="Email address" autocomplete="email"/>
           <button class="bg-btn" id="bg-forgot-btn">Send Reset Link</button>
           <div class="bg-error" id="bg-forgot-error"></div>
           <div class="bg-footer" id="bg-forgot-success" style="display:none;color:#8fbf8a">✓ Check your email for a reset link.</div>
@@ -394,8 +394,8 @@ textarea.form-input{min-height:72px;resize:vertical}
     <div id="bg-step-recovery" style="display:none">
       <div class="bg-title">Set a New Password</div>
       <div class="bg-sub">Choose a new password for your account</div>
-      <input type="password" id="bg-recovery-password" class="bg-input" placeholder="New password (6+ characters)" autocomplete="new-password"/>
-      <input type="password" id="bg-recovery-password-confirm" class="bg-input" placeholder="Confirm new password" autocomplete="new-password"/>
+      <input type="password" id="bg-recovery-password" class="bg-input" placeholder="New password (6+ characters)" aria-label="New password" autocomplete="new-password"/>
+      <input type="password" id="bg-recovery-password-confirm" class="bg-input" placeholder="Confirm new password" aria-label="Confirm new password" autocomplete="new-password"/>
       <button class="bg-btn" id="bg-recovery-btn">Set New Password</button>
       <div class="bg-error" id="bg-recovery-error"></div>
     </div>
@@ -405,10 +405,10 @@ textarea.form-input{min-height:72px;resize:vertical}
       <div class="bg-title">Almost there</div>
       <div class="bg-sub">Tell us who you are</div>
       <div class="bg-text">So we know who's using the app and can check in with you during beta.</div>
-      <input type="text" id="bg-name" class="bg-input" placeholder="Your name" autocomplete="name"/>
-      <input type="email" id="bg-email" class="bg-input" placeholder="Email address" autocomplete="email"/>
-      <input type="password" id="bg-password" class="bg-input" placeholder="Create a password (6+ characters)" autocomplete="new-password"/>
-      <input type="text" id="bg-invite-code" class="bg-input" placeholder="Family invite code (optional)" autocomplete="off" autocapitalize="none"/>
+      <input type="text" id="bg-name" class="bg-input" placeholder="Your name" aria-label="Your name" autocomplete="name"/>
+      <input type="email" id="bg-email" class="bg-input" placeholder="Email address" aria-label="Email address" autocomplete="email"/>
+      <input type="password" id="bg-password" class="bg-input" placeholder="Create a password (6+ characters)" aria-label="Create a password" autocomplete="new-password"/>
+      <input type="text" id="bg-invite-code" class="bg-input" placeholder="Family invite code (optional)" aria-label="Family invite code (optional)" autocomplete="off" autocapitalize="none"/>
       <div class="bg-footer" id="bg-invite-hint" style="margin-top:-8px;text-align:left">Have a code from a family member? Enter it here to join their household instead of starting your own — you'll skip the next question too.</div>
       <button class="bg-btn" id="bg-info-btn">Continue</button>
       <div class="bg-error" id="bg-info-error"></div>
@@ -2872,7 +2872,7 @@ ${state.view==="dashboard"?`
           <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${escapeHtml(p)}">
             <span class="avatar" style="background:${getColor(p)}">${escapeHtml(getInitials(p))}</span><span class="person-name-text">${escapeHtml(p)}</span>
           </button>
-          <button class="remove-btn" data-action="removePerson" data-person="${escapeHtml(p)}">×</button>
+          <button class="remove-btn" data-action="removePerson" data-person="${escapeHtml(p)}" aria-label="Remove ${escapeHtml(p)}">×</button>
         </div>`).join("")}
     </div>
   `:""}
@@ -2884,7 +2884,7 @@ ${state.view==="dashboard"?`
           <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${escapeHtml(p)}">
             <span class="avatar" style="background:${getColor(p)}">${escapeHtml(getInitials(p))}</span><span class="person-name-text">${escapeHtml(p)}</span>
           </button>
-          <button class="remove-btn" data-action="removePerson" data-person="${escapeHtml(p)}">×</button>
+          <button class="remove-btn" data-action="removePerson" data-person="${escapeHtml(p)}" aria-label="Remove ${escapeHtml(p)}">×</button>
         </div>`).join("")}
     </div>
   `:""}
@@ -2897,9 +2897,9 @@ ${state.view==="dashboard"?`
           <button data-action="setNewPersonKind" data-kind="pet" style="flex:1;padding:8px;border-radius:8px;font-size:13px;cursor:pointer;background:${state.newPersonKind==="pet"?"#c9a66b":"#2a1f14"};color:${state.newPersonKind==="pet"?"#1a1008":"#c9a66b"};border:1px solid ${state.newPersonKind==="pet"?"#c9a66b":"rgba(201,166,107,0.3)"}">🐾 Pet</button>
         </div>
         <div style="display:flex;gap:6px;width:100%">
-          <input class="person-name-input" id="newPersonInput" value="${escapeHtml(state.newPersonName)}" placeholder="Name..." style="flex:1"/>
-          <button class="confirm-btn" data-action="addPerson">✓</button>
-          <button class="cancel-btn" data-action="cancelAddPerson">×</button>
+          <input class="person-name-input" id="newPersonInput" value="${escapeHtml(state.newPersonName)}" placeholder="Name..." aria-label="Name" style="flex:1"/>
+          <button class="confirm-btn" data-action="addPerson" aria-label="Add">✓</button>
+          <button class="cancel-btn" data-action="cancelAddPerson" aria-label="Cancel">×</button>
         </div>
       </div>` : `<button class="add-person-btn" data-action="showAddPerson" style="grid-column:span 3">+ Add Person or Pet</button>`}
   </div>
@@ -3122,8 +3122,8 @@ function buildAdd() {
     ${(f.times||[]).length === 0 ? `<div style="color:#7a6a62;font-size:13px;padding:6px 0">No times set (as-needed medication)</div>` :
       f.times.map((t, i) => `
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-          <input type="time" class="form-input" data-time-idx="${i}" value="${t}" style="flex:1;margin:0"/>
-          <button class="remove-btn" data-action="removeTimeFromForm" data-idx="${i}" style="width:36px;height:36px;flex-shrink:0">×</button>
+          <input type="time" class="form-input" data-time-idx="${i}" value="${t}" aria-label="Reminder time ${i+1}" style="flex:1;margin:0"/>
+          <button class="remove-btn" data-action="removeTimeFromForm" data-idx="${i}" style="width:36px;height:36px;flex-shrink:0" aria-label="Remove this time">×</button>
         </div>
       `).join("")
     }
@@ -3139,7 +3139,7 @@ function buildScan() {
 <div class="section-header"><span>Scan Prescription Label</span></div>
 <div class="scan-card">
   <div class="scan-frame ${state.scanActive?"active":""}">
-    ${state.scanImagePreview?`<img class="scan-img" src="${state.scanImagePreview}"/>`:`<div class="scan-placeholder"><div class="icon">📋</div><div>Take a photo of your<br/>prescription label</div></div>`}
+    ${state.scanImagePreview?`<img class="scan-img" src="${state.scanImagePreview}" alt="Prescription label photo preview"/>`:`<div class="scan-placeholder"><div class="icon">📋</div><div>Take a photo of your<br/>prescription label</div></div>`}
     ${state.scanActive?`<div class="scan-overlay">Optimizing photo & reading label…</div>`:""}
   </div>
   <div class="scan-btn-row">
@@ -3208,8 +3208,8 @@ function buildConfirmSchedule() {
     ${c.times.length === 0 ? `<div style="color:#7a6a62;font-size:13px;padding:6px 0">No times set (as-needed medication)</div>` :
       c.times.map((t, i) => `
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-          <input type="time" class="form-input" data-time-idx="${i}" value="${t}" style="flex:1;margin:0"/>
-          <button class="remove-btn" data-action="removeTimeFromConfirm" data-idx="${i}" style="width:36px;height:36px;flex-shrink:0">×</button>
+          <input type="time" class="form-input" data-time-idx="${i}" value="${t}" aria-label="Reminder time ${i+1}" style="flex:1;margin:0"/>
+          <button class="remove-btn" data-action="removeTimeFromConfirm" data-idx="${i}" style="width:36px;height:36px;flex-shrink:0" aria-label="Remove this time">×</button>
         </div>
       `).join("")
     }
@@ -3244,7 +3244,7 @@ function buildPill() {
 ${state.pillTab==="photo"?`
 <div class="scan-card">
   <div class="scan-frame ${state.pillLoading?"active":""}">
-    ${state.pillImage?`<img class="scan-img" src="${state.pillImage}"/>`:`<div class="scan-placeholder"><div class="icon">💊</div><div>Place pill on white surface<br/>and take a clear photo</div></div>`}
+    ${state.pillImage?`<img class="scan-img" src="${state.pillImage}" alt="Pill photo preview"/>`:`<div class="scan-placeholder"><div class="icon">💊</div><div>Place pill on white surface<br/>and take a clear photo</div></div>`}
     ${state.pillLoading?`<div class="scan-overlay">Identifying pill…</div>`:""}
   </div>
   <div class="scan-btn-row">
@@ -3482,9 +3482,9 @@ function buildReport(filtered) {
   <div style="font-size:12px;color:#a0896e;margin-bottom:12px">Everyone below shares the same live medication list, on any device.</div>
   ${state.editingDisplayName ? `
     <div style="display:flex;gap:6px;margin-bottom:12px">
-      <input id="displayNameInput" value="${escapeHtml(state.displayNameInput)}" placeholder="Your name..." style="flex:1;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8"/>
-      <button data-action="saveDisplayName" style="background:#c9a66b;color:#1e1610;border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer">✓</button>
-      <button data-action="cancelEditDisplayName" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer">×</button>
+      <input id="displayNameInput" value="${escapeHtml(state.displayNameInput)}" placeholder="Your name..." aria-label="Your name" style="flex:1;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8"/>
+      <button data-action="saveDisplayName" style="background:#c9a66b;color:#1e1610;border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer" aria-label="Save name">✓</button>
+      <button data-action="cancelEditDisplayName" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer" aria-label="Cancel">×</button>
     </div>
   ` : `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;font-size:12px;color:#a0896e">
@@ -3508,15 +3508,15 @@ function buildReport(filtered) {
     if (isEditingName) {
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0">
         <span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px;flex-shrink:0">${escapeHtml(getInitials(p))}</span>
-        <input id="familyMemberNameInput" value="${escapeHtml(state.familyMemberNameInput)}" style="flex:1;min-width:0;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 8px;font-size:13px;color:#f0e6d8"/>
-        <button data-action="saveFamilyMemberName" data-fm-id="${fm.id}" style="background:#c9a66b;color:#1e1610;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0">✓</button>
-        <button data-action="cancelEditFamilyMemberName" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0">×</button>
+        <input id="familyMemberNameInput" value="${escapeHtml(state.familyMemberNameInput)}" aria-label="Family member name" style="flex:1;min-width:0;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 8px;font-size:13px;color:#f0e6d8"/>
+        <button data-action="saveFamilyMemberName" data-fm-id="${fm.id}" style="background:#c9a66b;color:#1e1610;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0" aria-label="Save name">✓</button>
+        <button data-action="cancelEditFamilyMemberName" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0" aria-label="Cancel">×</button>
       </div>`;
     }
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0">
       <div style="display:flex;align-items:center;gap:8px">
         <span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px">${escapeHtml(getInitials(p))}</span>
-        <div><div style="font-size:13px">${escapeHtml(p)} ${fm?`<button data-action="showEditFamilyMemberName" data-fm-id="${fm.id}" title="Rename" style="background:none;border:none;color:#a0896e;font-size:11px;cursor:pointer;padding:0">✎</button>`:""}</div><div style="font-size:11px;color:#a0896e">${status}</div></div>
+        <div><div style="font-size:13px">${escapeHtml(p)} ${fm?`<button data-action="showEditFamilyMemberName" data-fm-id="${fm.id}" title="Rename" aria-label="Rename ${escapeHtml(p)}" style="background:none;border:none;color:#a0896e;font-size:11px;cursor:pointer;padding:0">✎</button>`:""}</div><div style="font-size:11px;color:#a0896e">${status}</div></div>
       </div>
       ${fm?`<select data-caregiver-select data-fm-id="${fm.id}" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:6px 8px;font-size:12px;cursor:pointer;flex-shrink:0">
         <option value="" disabled ${!fm.caregiver_user_id?"selected":""}>Assign to...</option>
@@ -3555,7 +3555,7 @@ function buildReport(filtered) {
   <div style="margin-top:16px;padding-top:16px;border-top:1px solid #3a2e24">
     ${state.showDeleteAccountConfirm ? `
       <div style="font-size:12px;color:#e8a090;line-height:1.6;margin-bottom:10px">This permanently deletes your account and, if you're the only member of your household, all its medications, history, and documents. This cannot be undone.</div>
-      <input id="deleteAccountConfirmInput" value="${escapeHtml(state.deleteAccountConfirmInput)}" placeholder='Type "DELETE" to confirm' style="width:100%;box-sizing:border-box;background:#1e1610;border:1px solid #7a2a20;border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8;margin-bottom:10px;text-align:center"/>
+      <input id="deleteAccountConfirmInput" value="${escapeHtml(state.deleteAccountConfirmInput)}" placeholder='Type "DELETE" to confirm' aria-label='Type DELETE to confirm' style="width:100%;box-sizing:border-box;background:#1e1610;border:1px solid #7a2a20;border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8;margin-bottom:10px;text-align:center"/>
       <div style="display:flex;gap:8px">
         <button data-action="cancelDeleteAccount" style="flex:1;background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px;font-size:13px;font-family:Georgia,serif;cursor:pointer">Cancel</button>
         <button data-action="confirmDeleteAccount" ${state.deletingAccount?"disabled":""} style="flex:1;background:#7a2a20;color:#f0d8d0;border:1px solid #a03a2a;border-radius:10px;padding:10px;font-size:13px;font-family:Georgia,serif;cursor:pointer;opacity:${state.deletingAccount?0.6:1}">${state.deletingAccount?"Deleting...":"Permanently Delete"}</button>
@@ -3966,7 +3966,7 @@ if ('serviceWorker' in navigator) {
 
 <!-- INSTALL BANNER -->
 <div id="install-banner">
-  <button class="ib-close" onclick="dismissInstallBanner()">×</button>
+  <button class="ib-close" onclick="dismissInstallBanner()" aria-label="Close">×</button>
   <div class="ib-top">
     <div class="ib-icon"><img src="/icon-192.png" alt="ScriptSchedule"></div>
     <div class="ib-words">
