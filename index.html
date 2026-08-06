@@ -2726,15 +2726,24 @@ async function handleImageUpload(file, mode) {
     try {
       const result = await callClaude([{role:"user",content:[
         {type:"image",source:{type:"base64",media_type:prepped.mediaType,data:prepped.base64}},
-        {type:"text",text:`You are reading a prescription medication bottle label. Real-world photos may be blurry, glare-affected, partially obscured by stickers, curved, or only show part of the label. Extract every field you can identify confidently and use "Unknown" only when truly nothing readable is present for that field.
+        {type:"text",text:`You are reading a medication label — this could be a pharmacy prescription label OR an over-the-counter (OTC) product like a Tylenol bottle, a vitamin, or an allergy medicine box, each formatted very differently. Real-world photos may be blurry, glare-affected, partially obscured by stickers, curved, or only show part of the label/box. Extract every field you can identify confidently and use "Unknown" only when truly nothing readable is present for that field.
 
-LABEL READING TIPS:
-- Pharmacy labels typically have: medication name (often largest text), strength/dose (e.g. "10mg", "500 MG"), directions (e.g. "Take 1 tablet by mouth twice daily"), prescriber/doctor name, pharmacy name, refills count, NDC number, patient name.
+IF THIS IS A PHARMACY PRESCRIPTION LABEL:
+- Typically has: medication name (often largest text), strength/dose (e.g. "10mg", "500 MG"), directions (e.g. "Take 1 tablet by mouth twice daily"), prescriber/doctor name, pharmacy name, refills count, NDC number, patient name.
 - The medication name is usually the GENERIC name in caps (e.g. "LISINOPRIL"). The brand name may appear in parentheses or smaller (e.g. "(Zestril)"). Prefer the generic name for "name" field.
 - Common pharmacies: CVS, Walgreens, Walmart, Costco, Kroger, Publix, HEB, Rite Aid, Express Scripts, OptumRx, mail-order pharmacies. The pharmacy name is often at the top of the label.
 - Vet/pet medications may say "For animal use only" and list the pet's name as patient.
 - If multiple labels are stacked (e.g. warning sticker over main label), read what you can from each.
-- "Take with food" or "Take on empty stomach" is usually on a colored sticker — capture in specialInstructions.
+
+IF THIS IS AN OVER-THE-COUNTER (OTC) PRODUCT (no pharmacy sticker — a retail box/bottle with a "Drug Facts" panel, or a plain vitamin/supplement label):
+- This is completely normal and expected — OTC medications are just as valid to track as prescriptions. Do not treat missing prescriber/pharmacy/NDC/patient/refills as a problem; they simply don't exist on OTC packaging, so return "Unknown" for those specific fields without lowering confidence on the fields that ARE present.
+- Medication name is usually the product name (e.g. "Tylenol") and/or the active ingredient listed in the "Drug Facts" or "Active ingredient" panel (e.g. "Acetaminophen") — prefer the active ingredient name if both are visible, matching how prescriptions prefer the generic name.
+- Dose is the strength per unit from the "Active ingredient" line (e.g. "500 mg" per tablet), not a total daily amount.
+- Directions come from the "Directions" section of the Drug Facts panel (e.g. "adults and children 12 years and over: take 2 tablets every 4-6 hours as needed" or "take 1 tablet daily" for a vitamin) — map this the same way as prescription directions below.
+- Supplements/vitamins without a formal Drug Facts panel (e.g. "Vitamin D3 2000 IU, take 1 daily") should be read the same way — name, dose, and a directions/suggested-use line.
+
+GENERAL:
+- "Take with food" or "Take on empty stomach" (from a colored sticker, or an OTC label's own warnings like "take with food if stomach upset occurs") — capture in specialInstructions.
 
 DOSING SCHEDULE INFERENCE:
 Map directions text to structured fields:
@@ -2743,12 +2752,12 @@ Map directions text to structured fields:
 - "twice daily", "every 12 hours", "BID" → frequency:"Twice daily", times:["08:00","20:00"]
 - "three times daily", "every 8 hours", "TID" → frequency:"Three times daily", times:["08:00","14:00","20:00"]
 - "four times daily", "every 6 hours", "QID" → frequency:"Four times daily", times:["08:00","12:00","16:00","20:00"]
-- "as needed", "PRN" → frequency:"As needed", times:[]
+- "as needed", "PRN", "every 4-6 hours as needed", "do not exceed X in 24 hours" → frequency:"As needed", times:[] (this is the common case for OTC pain relievers, allergy meds taken occasionally, etc. — do not force a fixed schedule onto a genuinely as-needed product)
 - "every other day" → frequency:"Every other day", times:["08:00"]
 - "weekly" → frequency:"Weekly", times:["08:00"]
 If frequency is unclear or not visible, default to Daily at 08:00.
 
-CONFIDENCE: Rate each major field as "high" (clearly readable), "medium" (best guess), or "low" (unclear/inferred).
+CONFIDENCE: Rate each major field as "high" (clearly readable), "medium" (best guess), or "low" (unclear/inferred). A field being "Unknown" because it doesn't apply to an OTC product (prescriber, pharmacy, NDC, patient, refills) is not a low-confidence read — it's simply not present, which is expected and fine.
 
 Return ONLY valid JSON, no other text:
 {"name":"","dose":"","directions":"","prescriber":"","pharmacy":"","refills":"","ndc":"","patient":"","frequency":"Daily","times":["08:00"],"withFood":false,"specialInstructions":"","confidence":{"name":"high","dose":"high","directions":"high","schedule":"high"}}`}
@@ -3173,10 +3182,10 @@ function buildAdd() {
 
 function buildScan() {
   return `
-<div class="section-header"><span>Scan Prescription Label</span></div>
+<div class="section-header"><span>Scan Medication Label</span></div>
 <div class="scan-card">
   <div class="scan-frame ${state.scanActive?"active":""}">
-    ${state.scanImagePreview?`<img class="scan-img" src="${state.scanImagePreview}" alt="Prescription label photo preview"/>`:`<div class="scan-placeholder"><div class="icon">📋</div><div>Take a photo of your<br/>prescription label</div></div>`}
+    ${state.scanImagePreview?`<img class="scan-img" src="${state.scanImagePreview}" alt="Medication label photo preview"/>`:`<div class="scan-placeholder"><div class="icon">📋</div><div>Take a photo of your<br/>medication label — prescription<br/>or over-the-counter</div></div>`}
     ${state.scanActive?`<div class="scan-overlay">Optimizing photo & reading label…</div>`:""}
   </div>
   <div class="scan-btn-row">
@@ -4029,7 +4038,7 @@ if ('serviceWorker' in navigator) {
     <p>Your family prescription manager. Get started in 5 steps.</p>
     <div class="tut-steps">
       <div class="tut-step"><div class="tut-n">1</div><div class="tut-t"><b>Add your family</b> — tap <b>+ Add</b> at the top to add each family member by name.</div></div>
-      <div class="tut-step"><div class="tut-n">2</div><div class="tut-t"><b>Add medications</b> — tap <b>Meds</b> then <b>+ Add Med</b>, or use <b>Scan</b> to photograph a prescription label and auto-fill.</div></div>
+      <div class="tut-step"><div class="tut-n">2</div><div class="tut-t"><b>Add medications</b> — tap <b>Meds</b> then <b>+ Add Med</b>, or use <b>Scan</b> to photograph a label and auto-fill (works for prescriptions and over-the-counter products like Tylenol or vitamins).</div></div>
       <div class="tut-step">
         <div class="tut-n">3</div>
         <div class="tut-t">
