@@ -20,6 +20,7 @@ See the audit's Medium/Low sections — representative, not yet an exhaustive sw
 
 ## Resolved this session (for the record)
 
+- **Over-the-counter (OTC) medication support** — requested 2026-08-06. Manual entry already worked (pharmacy/refills are optional fields, "As needed" frequency already existed) — no changes needed there. Fixed the real gap: the Scan prompt was written entirely around pharmacy labels and the UI said "prescription label" everywhere, which would discourage anyone from trying to scan a Tylenol bottle or vitamin. Prompt now explicitly handles OTC "Drug Facts" panel format and common as-needed OTC phrasing; UI copy updated in three places to say "prescription or over-the-counter." Not tested end-to-end against a real scan (would need a live Anthropic API call) — verified the prompt is well-formed and the UI renders correctly.
 - **Silent write failures on offline/network errors** — real reliability gap found while investigating "offline behavior unverified": every write in the app went through `cloudUpsert`/`cloudDelete`, which swallowed failures to a console.warn only. A dose marked "taken" while offline looked successful with no indication it never reached the cloud. Fixed: real toast on every write failure, plus a proactive online/offline banner. Verified in the browser with real dispatched events and a forced failure.
 - **Accessibility (labeling)** — every icon-only button and previously-unlabeled input now has an `aria-label`; verified zero remain via a full re-scan and confirmed correct via the browser's actual accessibility tree. Real screen-reader/contrast/touch-target testing is a separate, still-unstarted piece.
 - **Data export** — "Export My Data" in App Settings downloads a single JSON file with everything in the household (medications, dose history, family members, emergency profiles, document details). Requested in the original spec, never built until now. Verified in the browser: payload structure and the actual download mechanism.
@@ -37,10 +38,6 @@ See the audit's Medium/Low sections — representative, not yet an exhaustive sw
 - Added self-service account/data deletion, verified end-to-end.
 - Added "Sign Out of Other Devices," verified against the live Supabase backend.
 - Medication history is archived instead of hard-deleted when a medication is removed.
-
-## Backlog / feature ideas (not scoped or started)
-
-- **Over-the-counter (OTC) medication reminders** — requested 2026-08-06. Not yet scoped: needs a decision on whether OTC meds are just a regular medication entry with a flag, or need their own simpler add-flow (no prescription/pharmacy/refill fields), and whether "as-needed" OTC use (e.g. ibuprofen when needed) should get different reminder/logging treatment than a scheduled prescription. Revisit and scope properly before building.
 
 ## How to use this file
 
