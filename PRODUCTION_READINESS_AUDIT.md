@@ -144,7 +144,7 @@ Each issue lists: what it is, where it lives, why it matters, what happens if it
 
 ---
 
-## H7. No in-app password reset — discovered as a live production blocker
+## H7. No in-app password reset — discovered as a live production blocker — RESOLVED
 
 - **Where:** the sign-in form (`#bg-signin-panel` in `index.html`) has no "Forgot password?" link at all.
 - **Why it matters:** confirmed live on 2026-08-06 — the account owner didn't know/remember their own password, and the *only* recovery path was manually sending a magic link from the Supabase dashboard's Authentication → Users page. That requires project-owner access; a real end user in the same situation would be completely locked out with no self-service way back in.

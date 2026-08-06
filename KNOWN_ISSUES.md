@@ -9,7 +9,6 @@ Running log of open issues. Full detail (why it matters, recommended fix, test p
 
 ## Open — High
 
-- **H7** — No in-app "Forgot Password" flow. Currently the only recovery path is an owner manually sending a magic link via the Supabase dashboard's Authentication → Users page — not something a real user could do for themselves. Should add a proper "Forgot password?" link on the sign-in form using Supabase's `resetPasswordForEmail()`, plus a landing screen in the app that detects a recovery token in the URL and lets the user set a new password.
 - **H2** — No MFA, no admin-specific account protections.
 - **H3** — No automatic session expiry; lost/stolen device stays signed in until manually revoked from another device.
 - **H4** — No crash reporting, error monitoring, or backup-failure alerting.
@@ -22,6 +21,7 @@ See the audit's Medium/Low sections — representative, not yet an exhaustive sw
 
 ## Resolved this session (for the record)
 
+- **H7** — Added self-service "Forgot password?" flow: sign-in form now has a working reset-request link, plus a "set new password" screen that appears automatically when a reset-email link is clicked (via Supabase's `PASSWORD_RECOVERY` auth event). Verified in the browser: toggle wiring, the real `resetPasswordForEmail` API call, loading/error/success states, the recovery screen, and both client-side validation branches.
 - **Live production bug (unlabeled, found 2026-08-06)** — real user account (`ccragsdale@gmail.com`, the app owner's own daily-use account) had a valid login but no `household_members` row at all — meaning it had silently been running on local-only cached data the entire time, with invites failing and no way to tell why. Root cause traced live: `init()` falls back to a local flag and renders the app even when there's truly no session or household, with no visible indication anything was wrong. Fixed by: (1) adding the `cloudSyncMissing` banner + reachable sign-in path (see below), (2) creating the missing household for this account via the existing `create_household_with_owner` RPC, verified end-to-end (invite code generation confirmed working on the actual phone this account uses daily).
 - **Supabase Auth "Site URL" was misconfigured to `localhost:3000`** instead of `https://scriptschedule.app` — discovered because a magic-link sign-in email redirected to an unreachable local address instead of the real site. This would have broken password reset, magic link, and email confirmation for every real user, not just this one case. Fixed by updating Authentication → URL Configuration → Site URL in the Supabase dashboard.
 - **No path back to sign-in once a session goes missing** — `index.html` now sets `state.cloudSyncMissing` and shows a persistent banner with a working "Sign In" button (reopens the existing beta-gate sign-in form) whenever `loadHouseholdDataFromSupabase()` confirms there's truly no session, instead of silently rendering stale local data forever.
