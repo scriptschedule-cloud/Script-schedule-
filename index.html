@@ -489,6 +489,7 @@ let state = {
   // back to it once the local "ss:beta" flag let someone skip straight past
   // the beta gate on a session that had actually expired or never existed.
   cloudSyncMissing: false,
+  currentUserEmail: null,
   // UI state
   showAddPerson: false,
   newPersonName: "",
@@ -1164,6 +1165,7 @@ async function loadHouseholdDataFromSupabase() {
   }
   state.cloudSyncMissing = false;
   state.currentUserId = session.user.id;
+  state.currentUserEmail = session.user.email;
 
   if (!state.householdId) {
     const { data: membership, error: memErr } = await sbClient
@@ -3399,6 +3401,7 @@ function buildReport(filtered) {
 
 <div style="margin-top:20px;padding:16px;background:#1a1208;border-radius:14px;border:1px solid #3a2e24;text-align:center">
   <div style="font-size:12px;color:#5a4a43;margin-bottom:10px;letter-spacing:.05em;text-transform:uppercase">App Settings</div>
+  ${state.currentUserEmail?`<div style="font-size:12px;color:#a0896e;margin-bottom:14px">Signed in as <strong style="color:#c9a66b">${escapeHtml(state.currentUserEmail)}</strong></div>`:`<div style="font-size:12px;color:#e8a090;margin-bottom:14px">⚠️ Not signed in</div>`}
   <button data-action="resetApp" style="background:#3a1a14;color:#e8a090;border:1px solid #7a2a20;border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">🗑️ Reset This Device</button>
   <div style="font-size:11px;color:#4a3a34;margin-top:8px;line-height:1.5">Clears saved data on THIS device only — your account and cloud data are untouched. Use this to start fresh on a shared device.</div>
 
