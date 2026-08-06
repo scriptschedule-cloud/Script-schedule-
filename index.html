@@ -481,6 +481,14 @@ let state = {
   emergencyProfiles: {},
   docs: [],
   loaded: false,
+  // True once loadHouseholdDataFromSupabase() has confirmed there's no real
+  // Supabase session — i.e. the app is showing only locally-cached data,
+  // with no cloud sync, no multi-device access, and no way to invite anyone
+  // (all of which need a real signed-in household). Surfaces a banner with
+  // a way back into the sign-in form, since previously there was no path
+  // back to it once the local "ss:beta" flag let someone skip straight past
+  // the beta gate on a session that had actually expired or never existed.
+  cloudSyncMissing: false,
   // UI state
   showAddPerson: false,
   newPersonName: "",
@@ -862,6 +870,20 @@ function showBetaGate() {
   setTimeout(()=>{ document.getElementById("bg-code").focus(); }, 200);
 }
 
+// Reopens the existing beta-gate sign-in form on top of the current
+// (already-loaded, local-only) app — for the "cloudSyncMissing" banner.
+// Deliberately reuses the same overlay/form signInExisting() already
+// targets rather than building a second one; doesn't clear any local data,
+// so if the user backs out nothing is lost. On success, signInExisting()
+// itself hides the overlay and calls realInit(), which re-runs
+// loadHouseholdDataFromSupabase() with the now-valid session.
+function promptSignIn() {
+  document.getElementById("beta-gate").classList.add("show");
+  const signinPanel = document.getElementById("bg-signin-panel");
+  if (signinPanel) signinPanel.style.display = "block";
+  setTimeout(()=>{ const el = document.getElementById("bg-signin-email"); if (el) el.focus(); }, 200);
+}
+
 function checkBetaCode() {
   const input = document.getElementById("bg-code");
   const errorEl = document.getElementById("bg-code-error");
@@ -1131,7 +1153,16 @@ function realInit() {
 // finished) — it just no-ops.
 async function loadHouseholdDataFromSupabase() {
   const { data: { session } } = await sbClient.auth.getSession();
-  if (!session) return;
+  if (!session) {
+    // Genuinely no session — not just "hasn't rehydrated yet" (init() already
+    // gives that a moment via the ss:beta fallback). Surface it so the user
+    // has a way back to a real sign-in instead of being stuck on local-only
+    // data with no explanation and no path back to the sign-in form.
+    state.cloudSyncMissing = true;
+    render();
+    return;
+  }
+  state.cloudSyncMissing = false;
   state.currentUserId = session.user.id;
 
   if (!state.householdId) {
@@ -2682,6 +2713,13 @@ ${toastHTML}
   </div>
 </header>
 
+${state.cloudSyncMissing?`
+<div style="background:#3a1a14;border-bottom:1px solid #7a2a20;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+  <div style="font-size:12px;color:#e8a090;line-height:1.5">⚠️ Not signed in — this device isn't synced or backed up, and you can't invite family members until you sign in.</div>
+  <button data-action="promptSignIn" style="background:#c9a66b;color:#1a1008;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-family:Georgia,serif;cursor:pointer;white-space:nowrap">Sign In</button>
+</div>
+`:""}
+
 ${state.view==="dashboard"?`
 <div class="people-section">
   <div class="people-all-row">
@@ -3550,6 +3588,7 @@ function handleAction(e) {
       break;
     }
     case "generateInvite": generateHouseholdInvite(); break;
+    case "promptSignIn": promptSignIn(); break;
     case "copyInviteLink": copyInviteLink(); break;
     case "resetApp": {
       if (confirm("Reset all app data? This clears all medications, family members and settings.")) {
