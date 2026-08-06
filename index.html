@@ -506,6 +506,7 @@ let state = {
   // back to it once the local "ss:beta" flag let someone skip straight past
   // the beta gate on a session that had actually expired or never existed.
   cloudSyncMissing: false,
+  isOffline: typeof navigator !== "undefined" && "onLine" in navigator ? !navigator.onLine : false,
   currentUserEmail: null,
   // UI state
   showAddPerson: false,
@@ -603,6 +604,20 @@ const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // needed. Show the "set a new password" screen when it happens.
 sbClient.auth.onAuthStateChange((event) => {
   if (event === "PASSWORD_RECOVERY") showRecoveryScreen();
+});
+
+// Proactive offline warning — cloudUpsert/cloudDelete already surface a
+// toast on each individual failed write, but this catches it up front
+// (e.g. right when a connection drops) rather than only after the user
+// has already tried and failed to save something.
+window.addEventListener("online", () => {
+  state.isOffline = false;
+  render();
+  showToast("✓ Back online");
+});
+window.addEventListener("offline", () => {
+  state.isOffline = true;
+  render();
 });
 
 // Cloud sync state — populated once a household is known (see realInit()).
@@ -725,23 +740,39 @@ function isTakenToday(med) {
 // first (existing behavior), these just mirror the change to Supabase in the
 // background. Errors are swallowed (console.warn only) so a network hiccup
 // never blocks the local-first save the app already relies on.
+// Every write in the app goes through this (or cloudDelete below) — until
+// now a failure here (offline, network error, server error) was silently
+// swallowed to a console.warn only, with zero indication to the user that
+// whatever they just did (mark a dose taken, add a medication...) never
+// actually saved. That's a real safety issue for a medication app: false
+// confidence that something was recorded. Now surfaces an honest toast on
+// every failure, in addition to the console.warn kept for debugging.
 async function cloudUpsert(table, row, onConflict) {
   try {
     const q = onConflict ? sbClient.from(table).upsert(row, { onConflict }) : sbClient.from(table).upsert(row);
     const { data, error } = await q.select().single();
-    if (error) { console.warn(`cloudUpsert(${table}) failed`, error); return null; }
+    if (error) {
+      console.warn(`cloudUpsert(${table}) failed`, error);
+      showToast("⚠ Couldn't save — check your connection and try again", "error");
+      return null;
+    }
     return data;
   } catch (e) {
     console.warn(`cloudUpsert(${table}) failed`, e);
+    showToast("⚠ Couldn't save — check your connection and try again", "error");
     return null;
   }
 }
 async function cloudDelete(table, id) {
   try {
     const { error } = await sbClient.from(table).delete().eq("id", id);
-    if (error) console.warn(`cloudDelete(${table}) failed`, error);
+    if (error) {
+      console.warn(`cloudDelete(${table}) failed`, error);
+      showToast("⚠ Couldn't delete — check your connection and try again", "error");
+    }
   } catch (e) {
     console.warn(`cloudDelete(${table}) failed`, e);
+    showToast("⚠ Couldn't delete — check your connection and try again", "error");
   }
 }
 
@@ -2851,6 +2882,12 @@ ${toastHTML}
     <div class="header-date">${today.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}</div>
   </div>
 </header>
+
+${state.isOffline?`
+<div style="background:#3a2e14;border-bottom:1px solid #7a5a20;padding:10px 16px;text-align:center">
+  <div style="font-size:12px;color:#e8c890;line-height:1.5">📡 You're offline — changes are saved on this device, but won't sync to your family or other devices until your connection comes back.</div>
+</div>
+`:""}
 
 ${state.cloudSyncMissing?`
 <div style="background:#3a1a14;border-bottom:1px solid #7a2a20;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
