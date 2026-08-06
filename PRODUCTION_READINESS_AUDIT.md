@@ -144,6 +144,15 @@ Each issue lists: what it is, where it lives, why it matters, what happens if it
 
 ---
 
+## H7. No in-app password reset — discovered as a live production blocker
+
+- **Where:** the sign-in form (`#bg-signin-panel` in `index.html`) has no "Forgot password?" link at all.
+- **Why it matters:** confirmed live on 2026-08-06 — the account owner didn't know/remember their own password, and the *only* recovery path was manually sending a magic link from the Supabase dashboard's Authentication → Users page. That requires project-owner access; a real end user in the same situation would be completely locked out with no self-service way back in.
+- **Related finding, now fixed:** while testing this, discovered Supabase Auth's **Site URL** was set to `localhost:3000` instead of `https://scriptschedule.app` — meaning every magic-link/password-reset/email-confirmation link sent to any user redirected to an unreachable local address. Fixed in the dashboard (Authentication → URL Configuration). This was silently broken for an unknown period before today and would have affected any real user who ever tried to reset a password or confirm an email.
+- **Recommended fix:** add a "Forgot password?" link to the sign-in form calling `sbClient.auth.resetPasswordForEmail(email)`, plus a landing screen that detects a `type=recovery` token in the URL (Supabase's client already parses this into a session automatically via `detectSessionInUrl`) and shows a simple "set a new password" form calling `sbClient.auth.updateUser({ password })`.
+- **Could affect existing features:** No — additive UI only.
+- **How to test:** trigger a real reset email, confirm the link lands on a working "set new password" screen instead of a dead end, confirm signing in with the new password works.
+
 ## Proposed order of work (pending your approval)
 
 1. **C2 + H6** — confirm the old files are actually reachable live, then remove the dead/duplicate files and directories (git-recoverable). Lowest risk, fastest to verify, closes a real live vulnerability.
