@@ -110,19 +110,16 @@ Each issue lists: what it is, where it lives, why it matters, what happens if it
 - **Could affect existing features:** Rotating the key requires updating the Netlify env var — no code change, brief operational step.
 - **How to test:** after rotation, confirm `delete-account.js` still works end-to-end (it already reads the key from `process.env`).
 
-### H6. Abandoned React scaffold and ~12MB of duplicated marketing assets clutter the repo
+### H6. Abandoned React scaffold and ~12MB of duplicated marketing assets clutter the repo — RESOLVED
 - **Where:** `scriptschedule/` (unused Create-React-App project, different tech stack entirely), plus marketing images duplicated between the repo root and `assets/`.
 - **Why it matters:** confuses anyone (including a future AI-assisted session) about what's actually live; not a security issue on its own, grouped here because it's part of the same cleanup as C2.
-- **Recommended fix:** delete alongside C2's cleanup, pending your go-ahead.
-- **Could affect existing features:** No.
-- **How to test:** confirm the live app still builds/deploys identically after removal.
+- **Status:** removed in the same commit as C2's cleanup (`3fe27f2`). Confirmed gone from the repo.
 
 ---
 
 ## MEDIUM (representative — not exhaustive; full sweep is later-phase work)
 
 - **Performance of the single-file render model** — every state change re-renders the entire app via one `innerHTML` string rebuild. Not yet measured against a large medication history or multi-profile household; worth a real performance pass (Phase 12) before assuming it's fine at scale.
-- **No data-export feature** — Phase 6/14 ask for this; doesn't exist today.
 - **No pagination on dose history** — `dose_events` will grow unbounded per household with no querying limits observed in the client code reviewed so far.
 - **Offline behavior unverified** — Supabase writes attempted while offline haven't been traced through to confirm what the user sees (silent failure vs. clear error); needs a dedicated pass (Phase 10).
 - **Accessibility unaudited** — no screen-reader/contrast/touch-target review has been done yet (Phase 13 scope).
