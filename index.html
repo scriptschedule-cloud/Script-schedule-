@@ -1319,10 +1319,17 @@ async function loadHouseholdDataFromSupabase() {
   }
 
   const hid = state.householdId;
+  // dose_events has no upper bound today — every dose ever logged loads on
+  // every app open, forever. Nothing in the app looks back further than the
+  // Report tab's 90-day range (the longest of its 7/30/90 options), so
+  // fetching the last 120 days (90 + a buffer) covers every real feature
+  // without the unbounded growth. Older rows aren't touched or deleted —
+  // this only limits what a fresh load pulls into client state.
+  const doseHistoryCutoff = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [fmRes, medRes, doseRes, emergRes, docRes, rosterRes] = await Promise.all([
     sbClient.from("family_members").select("*").eq("household_id", hid),
     sbClient.from("medications").select("*").eq("household_id", hid),
-    sbClient.from("dose_events").select("*").eq("household_id", hid),
+    sbClient.from("dose_events").select("*").eq("household_id", hid).gte("dose_date", doseHistoryCutoff),
     sbClient.from("emergency_profiles").select("*").eq("household_id", hid),
     sbClient.from("documents").select("*").eq("household_id", hid),
     sbClient.from("household_members").select("user_id, display_name, role, onesignal_subscription_id").eq("household_id", hid)
