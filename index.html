@@ -18,6 +18,99 @@
 <!-- OneSignal Web Push SDK -->
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<!-- Sentry error monitoring (KNOWN_ISSUES.md H4) — error tracking only, no
+     Session Replay (would capture the DOM/screen) and no Performance
+     Tracing (would attach request bodies as spans). The DSN below is a
+     public Sentry "client key," safe to ship in HTML by design:
+     https://docs.sentry.io/product/sentry-basics/dsn-explainer/ — it's a
+     write-only destination address, not a secret. Loads inert until
+     SENTRY_DSN is filled in. -->
+<script src="https://browser.sentry-cdn.com/10.69.0/bundle.min.js" crossorigin="anonymous"></script>
+<script>
+(function () {
+  var SENTRY_DSN = "https://745394d9a059f0d412e6092d26fb2c91@o4511870229479424.ingest.us.sentry.io/4511870249467904";
+  if (!window.Sentry || !SENTRY_DSN) return;
+
+  // Recursively redacts any key that could carry medication/PII content
+  // before anything reaches Sentry — a defense-in-depth backstop on top of
+  // the console wrapper below, in case a future call site ever attaches
+  // extra/context data directly.
+  var SENSITIVE_KEY_RE = /(name|dose|drug|medication|notes?|photo|image|scan|ocr|pharmacy|prescrib|barcode|email|phone|address|ssn|token)/i;
+  function scrub(val, depth) {
+    if (depth > 6 || val == null) return val;
+    if (Array.isArray(val)) return val.map(function (v) { return scrub(v, depth + 1); });
+    if (typeof val === "object") {
+      var out = {};
+      for (var k in val) {
+        if (!Object.prototype.hasOwnProperty.call(val, k)) continue;
+        out[k] = SENSITIVE_KEY_RE.test(k) ? "[redacted]" : scrub(val[k], depth + 1);
+      }
+      return out;
+    }
+    return val;
+  }
+
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    integrations: [],
+    tracesSampleRate: 0,
+    sendDefaultPii: false,
+    maxBreadcrumbs: 20,
+    beforeBreadcrumb: function (breadcrumb) {
+      // console.* breadcrumbs would attach the raw arguments of every
+      // console.warn/error call in this app — including Supabase error
+      // objects — to whatever event fires next. Dropped entirely; the
+      // console wrapper below sends a scrubbed version explicitly instead.
+      if (breadcrumb.category === "console") return null;
+      if (breadcrumb.data) {
+        delete breadcrumb.data.body;
+        delete breadcrumb.data.request_body;
+        delete breadcrumb.data.response_body;
+      }
+      return breadcrumb;
+    },
+    beforeSend: function (event) {
+      if (event.request) delete event.request.data;
+      if (event.extra) event.extra = scrub(event.extra, 0);
+      if (event.contexts) event.contexts = scrub(event.contexts, 0);
+      return event;
+    }
+  });
+
+  // Every existing console.warn("label", errorOrData) call in this app
+  // (there are dozens, e.g. "cloudUpsert(medications) failed") becomes
+  // visible in Sentry through this one wrapper, without ever forwarding
+  // the raw second argument — only a safe subset (an HTTP/Postgrest
+  // .code/.status, or an Error's name+stack) travels off-device.
+  function safeDetail(arg) {
+    if (arg instanceof Error) {
+      return { errorName: arg.name, stack: String(arg.stack || "").split("\n").slice(0, 10).join("\n") };
+    }
+    if (arg && typeof arg === "object") {
+      var out = {};
+      ["code", "status", "statusCode"].forEach(function (k) {
+        if (k in arg) out[k] = arg[k];
+      });
+      return out;
+    }
+    return undefined;
+  }
+  ["warn", "error"].forEach(function (level) {
+    var orig = console[level].bind(console);
+    console[level] = function () {
+      try {
+        var args = arguments;
+        var label = typeof args[0] === "string" ? args[0] : "console." + level;
+        Sentry.captureMessage(label, {
+          level: level === "error" ? "error" : "warning",
+          extra: { detail: safeDetail(args[1]) }
+        });
+      } catch (e) {}
+      orig.apply(console, arguments);
+    };
+  });
+})();
+</script>
 <script>
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal) {

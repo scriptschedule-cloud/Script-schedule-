@@ -18,6 +18,99 @@
 <!-- OneSignal Web Push SDK -->
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<!-- Sentry error monitoring (KNOWN_ISSUES.md H4) — error tracking only, no
+     Session Replay (would capture the DOM/screen) and no Performance
+     Tracing (would attach request bodies as spans). The DSN below is a
+     public Sentry "client key," safe to ship in HTML by design:
+     https://docs.sentry.io/product/sentry-basics/dsn-explainer/ — it's a
+     write-only destination address, not a secret. Loads inert until
+     SENTRY_DSN is filled in. -->
+<script src="https://browser.sentry-cdn.com/10.69.0/bundle.min.js" crossorigin="anonymous"></script>
+<script>
+(function () {
+  var SENTRY_DSN = "https://745394d9a059f0d412e6092d26fb2c91@o4511870229479424.ingest.us.sentry.io/4511870249467904";
+  if (!window.Sentry || !SENTRY_DSN) return;
+
+  // Recursively redacts any key that could carry medication/PII content
+  // before anything reaches Sentry — a defense-in-depth backstop on top of
+  // the console wrapper below, in case a future call site ever attaches
+  // extra/context data directly.
+  var SENSITIVE_KEY_RE = /(name|dose|drug|medication|notes?|photo|image|scan|ocr|pharmacy|prescrib|barcode|email|phone|address|ssn|token)/i;
+  function scrub(val, depth) {
+    if (depth > 6 || val == null) return val;
+    if (Array.isArray(val)) return val.map(function (v) { return scrub(v, depth + 1); });
+    if (typeof val === "object") {
+      var out = {};
+      for (var k in val) {
+        if (!Object.prototype.hasOwnProperty.call(val, k)) continue;
+        out[k] = SENSITIVE_KEY_RE.test(k) ? "[redacted]" : scrub(val[k], depth + 1);
+      }
+      return out;
+    }
+    return val;
+  }
+
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    integrations: [],
+    tracesSampleRate: 0,
+    sendDefaultPii: false,
+    maxBreadcrumbs: 20,
+    beforeBreadcrumb: function (breadcrumb) {
+      // console.* breadcrumbs would attach the raw arguments of every
+      // console.warn/error call in this app — including Supabase error
+      // objects — to whatever event fires next. Dropped entirely; the
+      // console wrapper below sends a scrubbed version explicitly instead.
+      if (breadcrumb.category === "console") return null;
+      if (breadcrumb.data) {
+        delete breadcrumb.data.body;
+        delete breadcrumb.data.request_body;
+        delete breadcrumb.data.response_body;
+      }
+      return breadcrumb;
+    },
+    beforeSend: function (event) {
+      if (event.request) delete event.request.data;
+      if (event.extra) event.extra = scrub(event.extra, 0);
+      if (event.contexts) event.contexts = scrub(event.contexts, 0);
+      return event;
+    }
+  });
+
+  // Every existing console.warn("label", errorOrData) call in this app
+  // (there are dozens, e.g. "cloudUpsert(medications) failed") becomes
+  // visible in Sentry through this one wrapper, without ever forwarding
+  // the raw second argument — only a safe subset (an HTTP/Postgrest
+  // .code/.status, or an Error's name+stack) travels off-device.
+  function safeDetail(arg) {
+    if (arg instanceof Error) {
+      return { errorName: arg.name, stack: String(arg.stack || "").split("\n").slice(0, 10).join("\n") };
+    }
+    if (arg && typeof arg === "object") {
+      var out = {};
+      ["code", "status", "statusCode"].forEach(function (k) {
+        if (k in arg) out[k] = arg[k];
+      });
+      return out;
+    }
+    return undefined;
+  }
+  ["warn", "error"].forEach(function (level) {
+    var orig = console[level].bind(console);
+    console[level] = function () {
+      try {
+        var args = arguments;
+        var label = typeof args[0] === "string" ? args[0] : "console." + level;
+        Sentry.captureMessage(label, {
+          level: level === "error" ? "error" : "warning",
+          extra: { detail: safeDetail(args[1]) }
+        });
+      } catch (e) {}
+      orig.apply(console, arguments);
+    };
+  });
+})();
+</script>
 <script>
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal) {
@@ -85,7 +178,7 @@ header{background:linear-gradient(135deg,#1a1008,#2a1f14);border-bottom:1px soli
 .person-btn.active{font-weight:700}
 .avatar{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#1a1008;flex-shrink:0}
 .person-name-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
-.remove-btn{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#5a2a1a;color:#e8a090;border:none;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;z-index:2}
+.remove-btn{position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;background:#5a2a1a;color:#e8a090;border:none;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;z-index:2}
 .add-person-btn{border:2px dashed #c9a66b;border-radius:18px;padding:11px 10px;background:transparent;color:#c9a66b;cursor:pointer;font-size:14px;font-weight:700;font-family:Georgia,serif;width:100%;text-align:center;letter-spacing:.02em}
 .add-person-btn:active{background:#c9a66b22}
 .add-person-input{display:flex;align-items:center;gap:4px;width:100%}
@@ -102,7 +195,7 @@ header{background:linear-gradient(135deg,#1a1008,#2a1f14);border-bottom:1px soli
 /* NAV */
 nav{display:flex;background:#1a1208;overflow-x:auto;scrollbar-width:none;position:fixed;bottom:0;left:0;right:0;z-index:60;border-top:1px solid #3a2e24;box-shadow:0 -4px 24px rgba(0,0,0,.5);max-width:480px;margin:0 auto}
 nav::-webkit-scrollbar{display:none}
-.nav-btn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 2px 14px;background:transparent;border:none;color:#8a7a70;cursor:pointer;font-size:10px;font-family:Georgia,serif;white-space:nowrap;overflow:hidden}
+.nav-btn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 2px 14px;background:transparent;border:none;color:#a08a7a;cursor:pointer;font-size:10px;font-family:Georgia,serif;white-space:nowrap;overflow:hidden}
 .nav-btn.active{color:#c9a66b;border-top:2px solid #c9a66b}
 .nav-icon{font-size:18px}
 
@@ -113,7 +206,7 @@ main{padding:14px 14px 100px;animation:fadeIn .3s ease}
 .stat-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
 .stat-card{background:#261e16;border:1px solid;border-radius:14px;padding:14px 10px;text-align:center}
 .stat-num{font-size:28px;font-weight:700;color:#c9a66b}
-.stat-label{font-size:11px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+.stat-label{font-size:11px;color:#a08a7a;text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
 .progress-card{background:#261e16;border-radius:14px;padding:14px;margin-bottom:14px}
 .progress-label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;color:#d9c7b9}
 .progress-track{height:8px;background:#3a2e24;border-radius:4px;overflow:hidden}
@@ -121,7 +214,7 @@ main{padding:14px 14px 100px;animation:fadeIn .3s ease}
 .section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .add-btn{background:#c9a66b;color:#1a1008;border:none;border-radius:20px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:13px;font-family:Georgia,serif}
 .back-btn{background:transparent;border:none;color:#c9a66b;cursor:pointer;font-size:14px;padding:0;font-family:Georgia,serif}
-.empty-state{text-align:center;padding:30px 20px;color:#8a7a70;font-size:16px}
+.empty-state{text-align:center;padding:30px 20px;color:#a08a7a;font-size:16px}
 
 /* MED CARD */
 .med-card{background:#261e16;border-radius:14px;padding:14px;margin-bottom:10px;border-left:3px solid;transition:opacity .3s}
@@ -130,9 +223,9 @@ main{padding:14px 14px 100px;animation:fadeIn .3s ease}
 .med-dot{width:10px;height:10px;border-radius:50%;margin-top:5px;flex-shrink:0}
 .med-name{font-size:17px;font-weight:700;color:#f0e6d8}
 .med-meta{font-size:14px;color:#a08a7a;margin-top:2px}
-.med-notes{font-size:12px;color:#8a7a70;margin-top:4px;font-style:italic}
+.med-notes{font-size:12px;color:#a08a7a;margin-top:4px;font-style:italic}
 .person-tag{font-size:11px;padding:3px 8px;border-radius:10px;font-weight:600;flex-shrink:0}
-.med-next-due{font-size:12px;color:#8a7a70;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.med-next-due{font-size:12px;color:#a08a7a;margin-bottom:10px;display:flex;align-items:center;gap:8px}
 .taken-badge{background:#2a4a34;color:#8cc49a;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
 .med-btns{display:flex;gap:8px}
 .btn-take{flex:1;background:#c9a66b;color:#1a1008;border:none;border-radius:10px;padding:8px;font-weight:700;cursor:pointer;font-size:13px;font-family:Georgia,serif}
@@ -163,19 +256,19 @@ textarea.form-input{min-height:72px;resize:vertical}
 .scan-result-card{background:#1a1208;border-radius:14px;padding:14px;margin-top:12px;border:1px solid #3a4e38}
 .scan-result-title{color:#8cc49a;font-weight:700;font-size:14px;margin-bottom:10px}
 .scan-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2a2018;font-size:13px}
-.scan-key{color:#8a7a70;text-transform:uppercase;font-size:11px;letter-spacing:.05em}
+.scan-key{color:#a08a7a;text-transform:uppercase;font-size:11px;letter-spacing:.05em}
 .scan-val{color:#f0e6d8;font-weight:600}
-.hint-text{color:#5a4a43;font-size:11px;text-align:center;margin-top:8px;line-height:1.6}
+.hint-text{color:#9c8879;font-size:11px;text-align:center;margin-top:8px;line-height:1.6}
 .error-box{background:#3a1a14;border:1px solid #8a4b3a;border-radius:12px;padding:12px;color:#e8a090;font-size:13px;margin-bottom:12px;line-height:1.6}
 
 /* PILL ID */
 .tab-switch{display:flex;background:#261e16;border-radius:12px;padding:4px;margin-bottom:16px}
 .tab-btn{flex:1;padding:8px;border-radius:9px;border:none;cursor:pointer;font-size:13px;font-family:Georgia,serif;transition:all .2s}
 .tab-btn.active{background:#c9a66b;color:#1a1008;font-weight:700}
-.tab-btn:not(.active){background:transparent;color:#8a7a70}
+.tab-btn:not(.active){background:transparent;color:#a08a7a}
 .pill-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
 .pill-stat{background:#1e1610;border-radius:10px;padding:8px 10px}
-.pill-stat-label{font-size:10px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.pill-stat-label{font-size:10px;color:#a08a7a;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
 .pill-stat-val{font-size:13px;font-weight:600;color:#f0e6d8}
 .tag{font-size:12px;padding:4px 10px;border-radius:20px;background:#2a2018;color:#d9c7b9;border:1px solid #3a3020}
 .allergy-tag{font-size:12px;padding:4px 10px;border-radius:20px;background:#4a1a14;color:#e8908a;border:1px solid #7a2a20}
@@ -199,7 +292,7 @@ textarea.form-input{min-height:72px;resize:vertical}
 
 /* DOCS */
 .doc-upload-area{margin-bottom:14px}
-.doc-upload-label{font-size:11px;color:#8a7a70;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
+.doc-upload-label{font-size:11px;color:#a08a7a;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
 .doc-upload-row{display:flex;gap:8px}
 .doc-upload-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:#261e16;border:1px solid #3a2e24;border-radius:12px;padding:12px 8px;color:#d9c7b9;text-align:center;cursor:pointer;font-family:Georgia,serif;font-size:12px}
 .doc-upload-btn.primary{flex:2;background:linear-gradient(135deg,#c9a66b,#e8c87a);color:#1a1008;font-weight:700}
@@ -287,7 +380,7 @@ textarea.form-input{min-height:72px;resize:vertical}
 .week-strip{display:flex;justify-content:space-around;padding:10px 14px;background:#1e1610;border-bottom:1px solid #2a2018}
 .day-pill{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 8px;border-radius:10px}
 .day-pill.today{background:#3a2e24}
-.day-name{font-size:10px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em}
+.day-name{font-size:10px;color:#a08a7a;text-transform:uppercase;letter-spacing:.08em}
 .day-num{font-size:16px;font-weight:600;color:#f0e6d8}
 
 /* SCHEDULE */
@@ -303,14 +396,14 @@ textarea.form-input{min-height:72px;resize:vertical}
 #tut.show{opacity:1;pointer-events:all}
 .tut-box{background:#261e16;border:1px solid rgba(200,154,88,.35);border-radius:22px;padding:26px 22px;max-width:340px;width:100%;text-align:center}
 .tut-box h2{font-family:Georgia,serif;font-size:1.3rem;color:#f0e6d8;margin-bottom:8px}
-.tut-box p{font-size:13px;color:#8a7a70;margin-bottom:20px;line-height:1.6}
+.tut-box p{font-size:13px;color:#a08a7a;margin-bottom:20px;line-height:1.6}
 .tut-steps{text-align:left;display:flex;flex-direction:column;gap:14px;margin-bottom:22px}
 .tut-step{display:flex;gap:12px;align-items:flex-start}
 .tut-n{width:26px;height:26px;border-radius:50%;background:#c9a66b;color:#1a1008;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .tut-t{font-size:13px;color:#d9c7b9;line-height:1.5}
 .tut-t b{color:#c9a66b}
 .tut-go{width:100%;background:linear-gradient(135deg,#8B6914,#c9a66b);color:#1a1008;border:none;border-radius:13px;padding:14px;font-size:15px;font-weight:700;font-family:Georgia,serif;cursor:pointer;margin-bottom:8px}
-.tut-skip{background:none;border:none;color:#5a4a43;font-size:12px;cursor:pointer;font-family:Georgia,serif;width:100%}
+.tut-skip{background:none;border:none;color:#9c8879;font-size:12px;cursor:pointer;font-family:Georgia,serif;width:100%}
 .reminder-overlay{position:fixed;inset:0;background:rgba(10,6,2,.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;animation:reminderFadeIn .3s ease-out}
 .reminder-card{background:linear-gradient(180deg,#2a1f12,#1a1208);border-radius:18px;border:2px solid #c9a66b;padding:24px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 40px rgba(201,166,107,.2)}
 .reminder-header{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #3a2e24}
@@ -327,7 +420,7 @@ textarea.form-input{min-height:72px;resize:vertical}
 .reminder-btn:active{opacity:.7}
 .reminder-btn-take{background:linear-gradient(180deg,#c9a66b,#a8854a);color:#1a1008;font-size:17px;padding:16px}
 .reminder-btn-snooze{background:#3a2e24;color:#d9c7b9;border:1px solid #4a3e34}
-.reminder-btn-skip{background:transparent;color:#8a7a70;font-size:13px;padding:10px}
+.reminder-btn-skip{background:transparent;color:#a08a7a;font-size:13px;padding:10px}
 @keyframes reminderFadeIn{from{opacity:0}to{opacity:1}}
 @keyframes reminderPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.15);opacity:.8}}
 @media print {
@@ -369,18 +462,35 @@ textarea.form-input{min-height:72px;resize:vertical}
       <div class="bg-title">Welcome to the Beta</div>
       <div class="bg-sub">ScriptSchedule</div>
       <div class="bg-text">You're one of the first to try it. Enter the beta access code to get started — this is the same code for everyone testing the beta, not specific to your family.</div>
-      <input type="text" id="bg-code" class="bg-input" placeholder="Beta access code" autocomplete="off" autocapitalize="none"/>
+      <input type="text" id="bg-code" class="bg-input" placeholder="Beta access code" aria-label="Beta access code" autocomplete="off" autocapitalize="none"/>
       <button class="bg-btn" id="bg-code-btn">Continue</button>
       <div class="bg-error" id="bg-code-error"></div>
       <div class="bg-footer">Don't have a code? Reach out to Cynthia.</div>
       <div class="bg-footer" style="opacity:.75">(Joining a family member's household? You'll still need this beta code first — their invite code comes on the next screen.)</div>
       <div class="bg-footer"><a href="#" id="bg-signin-toggle">Already have an account? Sign in</a></div>
       <div id="bg-signin-panel" style="display:none;margin-top:14px">
-        <input type="email" id="bg-signin-email" class="bg-input" placeholder="Email address" autocomplete="email"/>
-        <input type="password" id="bg-signin-password" class="bg-input" placeholder="Password" autocomplete="current-password"/>
+        <input type="email" id="bg-signin-email" class="bg-input" placeholder="Email address" aria-label="Email address" autocomplete="email"/>
+        <input type="password" id="bg-signin-password" class="bg-input" placeholder="Password" aria-label="Password" autocomplete="current-password"/>
         <button class="bg-btn" id="bg-signin-btn">Sign In</button>
         <div class="bg-error" id="bg-signin-error"></div>
+        <div class="bg-footer" style="margin-top:6px"><a href="#" id="bg-forgot-toggle">Forgot password?</a></div>
+        <div id="bg-forgot-panel" style="display:none;margin-top:10px">
+          <input type="email" id="bg-forgot-email" class="bg-input" placeholder="Email address" aria-label="Email address" autocomplete="email"/>
+          <button class="bg-btn" id="bg-forgot-btn">Send Reset Link</button>
+          <div class="bg-error" id="bg-forgot-error"></div>
+          <div class="bg-footer" id="bg-forgot-success" style="display:none;color:#8fbf8a">✓ Check your email for a reset link.</div>
+        </div>
       </div>
+    </div>
+
+    <!-- STEP: Set new password (shown after clicking a password-reset email link) -->
+    <div id="bg-step-recovery" style="display:none">
+      <div class="bg-title">Set a New Password</div>
+      <div class="bg-sub">Choose a new password for your account</div>
+      <input type="password" id="bg-recovery-password" class="bg-input" placeholder="New password (6+ characters)" aria-label="New password" autocomplete="new-password"/>
+      <input type="password" id="bg-recovery-password-confirm" class="bg-input" placeholder="Confirm new password" aria-label="Confirm new password" autocomplete="new-password"/>
+      <button class="bg-btn" id="bg-recovery-btn">Set New Password</button>
+      <div class="bg-error" id="bg-recovery-error"></div>
     </div>
 
     <!-- STEP 2: Name + Email -->
@@ -388,10 +498,10 @@ textarea.form-input{min-height:72px;resize:vertical}
       <div class="bg-title">Almost there</div>
       <div class="bg-sub">Tell us who you are</div>
       <div class="bg-text">So we know who's using the app and can check in with you during beta.</div>
-      <input type="text" id="bg-name" class="bg-input" placeholder="Your name" autocomplete="name"/>
-      <input type="email" id="bg-email" class="bg-input" placeholder="Email address" autocomplete="email"/>
-      <input type="password" id="bg-password" class="bg-input" placeholder="Create a password (6+ characters)" autocomplete="new-password"/>
-      <input type="text" id="bg-invite-code" class="bg-input" placeholder="Family invite code (optional)" autocomplete="off" autocapitalize="none"/>
+      <input type="text" id="bg-name" class="bg-input" placeholder="Your name" aria-label="Your name" autocomplete="name"/>
+      <input type="email" id="bg-email" class="bg-input" placeholder="Email address" aria-label="Email address" autocomplete="email"/>
+      <input type="password" id="bg-password" class="bg-input" placeholder="Create a password (6+ characters)" aria-label="Create a password" autocomplete="new-password"/>
+      <input type="text" id="bg-invite-code" class="bg-input" placeholder="Family invite code (optional)" aria-label="Family invite code (optional)" autocomplete="off" autocapitalize="none"/>
       <div class="bg-footer" id="bg-invite-hint" style="margin-top:-8px;text-align:left">Have a code from a family member? Enter it here to join their household instead of starting your own — you'll skip the next question too.</div>
       <button class="bg-btn" id="bg-info-btn">Continue</button>
       <div class="bg-error" id="bg-info-error"></div>
@@ -481,6 +591,16 @@ let state = {
   emergencyProfiles: {},
   docs: [],
   loaded: false,
+  // True once loadHouseholdDataFromSupabase() has confirmed there's no real
+  // Supabase session — i.e. the app is showing only locally-cached data,
+  // with no cloud sync, no multi-device access, and no way to invite anyone
+  // (all of which need a real signed-in household). Surfaces a banner with
+  // a way back into the sign-in form, since previously there was no path
+  // back to it once the local "ss:beta" flag let someone skip straight past
+  // the beta gate on a session that had actually expired or never existed.
+  cloudSyncMissing: false,
+  isOffline: typeof navigator !== "undefined" && "onLine" in navigator ? !navigator.onLine : false,
+  currentUserEmail: null,
   // UI state
   showAddPerson: false,
   newPersonName: "",
@@ -570,6 +690,28 @@ function setState(updates) { Object.assign(state, updates); render(); }
 const SUPABASE_URL = "https://txaezqhbtjbtbxwlveoq.supabase.co";
 const SUPABASE_KEY = "sb_publishable_DMnbXfeIUUEFf3OICUE-fA_N3gfZZcw";
 const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Supabase's client auto-detects a recovery token in the URL (a click from
+// a password-reset email) and fires this event once it's exchanged the
+// token for a real (temporary, reset-only) session — no manual URL parsing
+// needed. Show the "set a new password" screen when it happens.
+sbClient.auth.onAuthStateChange((event) => {
+  if (event === "PASSWORD_RECOVERY") showRecoveryScreen();
+});
+
+// Proactive offline warning — cloudUpsert/cloudDelete already surface a
+// toast on each individual failed write, but this catches it up front
+// (e.g. right when a connection drops) rather than only after the user
+// has already tried and failed to save something.
+window.addEventListener("online", () => {
+  state.isOffline = false;
+  render();
+  showToast("✓ Back online");
+});
+window.addEventListener("offline", () => {
+  state.isOffline = true;
+  render();
+});
 
 // Cloud sync state — populated once a household is known (see realInit()).
 // householdId lives only in memory (the old ss:household_id localStorage key
@@ -691,23 +833,39 @@ function isTakenToday(med) {
 // first (existing behavior), these just mirror the change to Supabase in the
 // background. Errors are swallowed (console.warn only) so a network hiccup
 // never blocks the local-first save the app already relies on.
+// Every write in the app goes through this (or cloudDelete below) — until
+// now a failure here (offline, network error, server error) was silently
+// swallowed to a console.warn only, with zero indication to the user that
+// whatever they just did (mark a dose taken, add a medication...) never
+// actually saved. That's a real safety issue for a medication app: false
+// confidence that something was recorded. Now surfaces an honest toast on
+// every failure, in addition to the console.warn kept for debugging.
 async function cloudUpsert(table, row, onConflict) {
   try {
     const q = onConflict ? sbClient.from(table).upsert(row, { onConflict }) : sbClient.from(table).upsert(row);
     const { data, error } = await q.select().single();
-    if (error) { console.warn(`cloudUpsert(${table}) failed`, error); return null; }
+    if (error) {
+      console.warn(`cloudUpsert(${table}) failed`, error);
+      showToast("⚠ Couldn't save — check your connection and try again", "error");
+      return null;
+    }
     return data;
   } catch (e) {
     console.warn(`cloudUpsert(${table}) failed`, e);
+    showToast("⚠ Couldn't save — check your connection and try again", "error");
     return null;
   }
 }
 async function cloudDelete(table, id) {
   try {
     const { error } = await sbClient.from(table).delete().eq("id", id);
-    if (error) console.warn(`cloudDelete(${table}) failed`, error);
+    if (error) {
+      console.warn(`cloudDelete(${table}) failed`, error);
+      showToast("⚠ Couldn't delete — check your connection and try again", "error");
+    }
   } catch (e) {
     console.warn(`cloudDelete(${table}) failed`, e);
+    showToast("⚠ Couldn't delete — check your connection and try again", "error");
   }
 }
 
@@ -860,6 +1018,20 @@ function showBetaGate() {
     }
   } catch(e) {}
   setTimeout(()=>{ document.getElementById("bg-code").focus(); }, 200);
+}
+
+// Reopens the existing beta-gate sign-in form on top of the current
+// (already-loaded, local-only) app — for the "cloudSyncMissing" banner.
+// Deliberately reuses the same overlay/form signInExisting() already
+// targets rather than building a second one; doesn't clear any local data,
+// so if the user backs out nothing is lost. On success, signInExisting()
+// itself hides the overlay and calls realInit(), which re-runs
+// loadHouseholdDataFromSupabase() with the now-valid session.
+function promptSignIn() {
+  document.getElementById("beta-gate").classList.add("show");
+  const signinPanel = document.getElementById("bg-signin-panel");
+  if (signinPanel) signinPanel.style.display = "block";
+  setTimeout(()=>{ const el = document.getElementById("bg-signin-email"); if (el) el.focus(); }, 200);
 }
 
 function checkBetaCode() {
@@ -1053,6 +1225,91 @@ async function signInExisting() {
   setTimeout(realInit, 250);
 }
 
+// Sends a password-reset email. redirectTo is explicit (not left to
+// Supabase's dashboard-configured default) so this keeps working correctly
+// even if that setting is ever wrong again — as it was found to be earlier,
+// pointed at localhost instead of the real site.
+async function sendPasswordReset() {
+  const emailEl = document.getElementById("bg-forgot-email");
+  const errorEl = document.getElementById("bg-forgot-error");
+  const successEl = document.getElementById("bg-forgot-success");
+  const btn = document.getElementById("bg-forgot-btn");
+  const email = (emailEl.value || "").trim();
+
+  if (!email) {
+    errorEl.textContent = "Enter your email address.";
+    successEl.style.display = "none";
+    return;
+  }
+  errorEl.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "Sending...";
+
+  const { error } = await sbClient.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin
+  });
+
+  btn.disabled = false;
+  btn.textContent = "Send Reset Link";
+
+  if (error) {
+    errorEl.textContent = "Couldn't send the reset email — try again in a moment.";
+    return;
+  }
+  successEl.style.display = "block";
+}
+
+// Shown when Supabase's client detects a password-recovery link was just
+// clicked (see the onAuthStateChange listener near sbClient's init) — swaps
+// the beta-gate overlay to just the "set new password" step, hiding
+// whatever else was showing (beta code entry, sign-in form, etc).
+function showRecoveryScreen() {
+  document.getElementById("beta-gate").classList.add("show");
+  document.getElementById("beta-gate").style.display = "flex";
+  document.getElementById("loading").style.display = "none";
+  ["bg-step-code", "bg-step-info", "bg-step-role"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  document.getElementById("bg-step-recovery").style.display = "block";
+}
+
+async function setNewPassword() {
+  const passwordEl = document.getElementById("bg-recovery-password");
+  const confirmEl = document.getElementById("bg-recovery-password-confirm");
+  const errorEl = document.getElementById("bg-recovery-error");
+  const btn = document.getElementById("bg-recovery-btn");
+  const password = passwordEl.value || "";
+  const confirm = confirmEl.value || "";
+
+  if (password.length < 6) {
+    errorEl.textContent = "Password must be at least 6 characters.";
+    return;
+  }
+  if (password !== confirm) {
+    errorEl.textContent = "Passwords don't match.";
+    return;
+  }
+  errorEl.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+
+  const { error } = await sbClient.auth.updateUser({ password });
+
+  btn.disabled = false;
+  btn.textContent = "Set New Password";
+
+  if (error) {
+    errorEl.textContent = "Couldn't update your password — try again.";
+    return;
+  }
+
+  document.getElementById("beta-gate").classList.remove("show");
+  document.getElementById("beta-gate").style.display = "none";
+  document.getElementById("loading").style.display = "flex";
+  setTimeout(realInit, 250);
+}
+
 // ── INIT ─────────────────────────────────────────────────────────────────────
 async function init() {
   // Gate on a real Supabase session rather than the local "ss:beta" flag, so
@@ -1131,8 +1388,18 @@ function realInit() {
 // finished) — it just no-ops.
 async function loadHouseholdDataFromSupabase() {
   const { data: { session } } = await sbClient.auth.getSession();
-  if (!session) return;
+  if (!session) {
+    // Genuinely no session — not just "hasn't rehydrated yet" (init() already
+    // gives that a moment via the ss:beta fallback). Surface it so the user
+    // has a way back to a real sign-in instead of being stuck on local-only
+    // data with no explanation and no path back to the sign-in form.
+    state.cloudSyncMissing = true;
+    render();
+    return;
+  }
+  state.cloudSyncMissing = false;
   state.currentUserId = session.user.id;
+  state.currentUserEmail = session.user.email;
 
   if (!state.householdId) {
     const { data: membership, error: memErr } = await sbClient
@@ -1145,10 +1412,17 @@ async function loadHouseholdDataFromSupabase() {
   }
 
   const hid = state.householdId;
+  // dose_events has no upper bound today — every dose ever logged loads on
+  // every app open, forever. Nothing in the app looks back further than the
+  // Report tab's 90-day range (the longest of its 7/30/90 options), so
+  // fetching the last 120 days (90 + a buffer) covers every real feature
+  // without the unbounded growth. Older rows aren't touched or deleted —
+  // this only limits what a fresh load pulls into client state.
+  const doseHistoryCutoff = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [fmRes, medRes, doseRes, emergRes, docRes, rosterRes] = await Promise.all([
     sbClient.from("family_members").select("*").eq("household_id", hid),
     sbClient.from("medications").select("*").eq("household_id", hid),
-    sbClient.from("dose_events").select("*").eq("household_id", hid),
+    sbClient.from("dose_events").select("*").eq("household_id", hid).gte("dose_date", doseHistoryCutoff),
     sbClient.from("emergency_profiles").select("*").eq("household_id", hid),
     sbClient.from("documents").select("*").eq("household_id", hid),
     sbClient.from("household_members").select("user_id, display_name, role, onesignal_subscription_id").eq("household_id", hid)
@@ -1689,6 +1963,33 @@ async function signOutOtherDevices() {
     setState({ signingOutOthers: false });
   }
 }
+// Downloads everything in the current household as a single JSON file —
+// medications, dose history, family members, emergency profiles, and
+// document details (metadata/extracted fields only; the underlying photos
+// were never stored server-side in the first place, see privacy.html).
+// Pulled straight from already-loaded client state rather than a fresh
+// query, since loadHouseholdDataFromSupabase() keeps it current.
+function exportMyData() {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    account: { email: state.currentUserEmail || null },
+    familyMembers: state.familyMembers,
+    medications: state.meds,
+    doseHistory: state.doseEventsByMedId,
+    emergencyProfiles: state.emergencyProfiles,
+    documents: state.docs
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `scriptschedule-export-${todayStr()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast("✓ Export downloaded");
+}
 // Renames a family member via the rename_family_member RPC (existed in the
 // schema since 0001 but had no UI hookup — the only way to fix a typo was
 // deleting and re-adding, which orphans that person's medication history).
@@ -2205,10 +2506,17 @@ async function scheduleRemoteCaregiverPush(targetUserId, personMeds) {
   try {
     const { data: { session } } = await sbClient.auth.getSession();
     if (!session) return;
+    // Known approximation: this uses the ASSIGNING device's timezone, not
+    // necessarily the new caregiver's — there's nowhere today that stores a
+    // per-user timezone. If they're in a different zone, this initial
+    // remote schedule will be off until their own device next opens and
+    // calls syncPushSchedule(), which cancels and reschedules using their
+    // device's actual timezone.
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     await fetch("/.netlify/functions/schedule-push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscriptionId, meds: scheduleableMeds, daysAhead: 7, accessToken: session.access_token })
+      body: JSON.stringify({ subscriptionId, meds: scheduleableMeds, daysAhead: 7, timeZone, accessToken: session.access_token })
     });
   } catch (e) {
     console.warn("Remote caregiver schedule-push error:", e);
@@ -2242,6 +2550,13 @@ async function syncPushSchedule() {
   try {
     const { data: { session } } = await sbClient.auth.getSession();
     if (!session) return;
+    // Cancel each medication's existing scheduled pushes before rescheduling.
+    // This is what flushes out any notifications still sitting in OneSignal
+    // from before the timezone fix below (they were created under the old,
+    // timezone-unaware math and won't correct themselves otherwise), and
+    // generally keeps stale/duplicate entries from accumulating over time.
+    await Promise.all(scheduleableMeds.map(m => cancelMedPushes(m.id)));
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const r = await fetch("/.netlify/functions/schedule-push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2249,6 +2564,7 @@ async function syncPushSchedule() {
         subscriptionId,
         meds: scheduleableMeds,
         daysAhead: 7,
+        timeZone,
         accessToken: session.access_token
       })
     });
@@ -2510,15 +2826,24 @@ async function handleImageUpload(file, mode) {
     try {
       const result = await callClaude([{role:"user",content:[
         {type:"image",source:{type:"base64",media_type:prepped.mediaType,data:prepped.base64}},
-        {type:"text",text:`You are reading a prescription medication bottle label. Real-world photos may be blurry, glare-affected, partially obscured by stickers, curved, or only show part of the label. Extract every field you can identify confidently and use "Unknown" only when truly nothing readable is present for that field.
+        {type:"text",text:`You are reading a medication label — this could be a pharmacy prescription label OR an over-the-counter (OTC) product like a Tylenol bottle, a vitamin, or an allergy medicine box, each formatted very differently. Real-world photos may be blurry, glare-affected, partially obscured by stickers, curved, or only show part of the label/box. Extract every field you can identify confidently and use "Unknown" only when truly nothing readable is present for that field.
 
-LABEL READING TIPS:
-- Pharmacy labels typically have: medication name (often largest text), strength/dose (e.g. "10mg", "500 MG"), directions (e.g. "Take 1 tablet by mouth twice daily"), prescriber/doctor name, pharmacy name, refills count, NDC number, patient name.
+IF THIS IS A PHARMACY PRESCRIPTION LABEL:
+- Typically has: medication name (often largest text), strength/dose (e.g. "10mg", "500 MG"), directions (e.g. "Take 1 tablet by mouth twice daily"), prescriber/doctor name, pharmacy name, refills count, NDC number, patient name.
 - The medication name is usually the GENERIC name in caps (e.g. "LISINOPRIL"). The brand name may appear in parentheses or smaller (e.g. "(Zestril)"). Prefer the generic name for "name" field.
 - Common pharmacies: CVS, Walgreens, Walmart, Costco, Kroger, Publix, HEB, Rite Aid, Express Scripts, OptumRx, mail-order pharmacies. The pharmacy name is often at the top of the label.
 - Vet/pet medications may say "For animal use only" and list the pet's name as patient.
 - If multiple labels are stacked (e.g. warning sticker over main label), read what you can from each.
-- "Take with food" or "Take on empty stomach" is usually on a colored sticker — capture in specialInstructions.
+
+IF THIS IS AN OVER-THE-COUNTER (OTC) PRODUCT (no pharmacy sticker — a retail box/bottle with a "Drug Facts" panel, or a plain vitamin/supplement label):
+- This is completely normal and expected — OTC medications are just as valid to track as prescriptions. Do not treat missing prescriber/pharmacy/NDC/patient/refills as a problem; they simply don't exist on OTC packaging, so return "Unknown" for those specific fields without lowering confidence on the fields that ARE present.
+- Medication name is usually the product name (e.g. "Tylenol") and/or the active ingredient listed in the "Drug Facts" or "Active ingredient" panel (e.g. "Acetaminophen") — prefer the active ingredient name if both are visible, matching how prescriptions prefer the generic name.
+- Dose is the strength per unit from the "Active ingredient" line (e.g. "500 mg" per tablet), not a total daily amount.
+- Directions come from the "Directions" section of the Drug Facts panel (e.g. "adults and children 12 years and over: take 2 tablets every 4-6 hours as needed" or "take 1 tablet daily" for a vitamin) — map this the same way as prescription directions below.
+- Supplements/vitamins without a formal Drug Facts panel (e.g. "Vitamin D3 2000 IU, take 1 daily") should be read the same way — name, dose, and a directions/suggested-use line.
+
+GENERAL:
+- "Take with food" or "Take on empty stomach" (from a colored sticker, or an OTC label's own warnings like "take with food if stomach upset occurs") — capture in specialInstructions.
 
 DOSING SCHEDULE INFERENCE:
 Map directions text to structured fields:
@@ -2527,12 +2852,12 @@ Map directions text to structured fields:
 - "twice daily", "every 12 hours", "BID" → frequency:"Twice daily", times:["08:00","20:00"]
 - "three times daily", "every 8 hours", "TID" → frequency:"Three times daily", times:["08:00","14:00","20:00"]
 - "four times daily", "every 6 hours", "QID" → frequency:"Four times daily", times:["08:00","12:00","16:00","20:00"]
-- "as needed", "PRN" → frequency:"As needed", times:[]
+- "as needed", "PRN", "every 4-6 hours as needed", "do not exceed X in 24 hours" → frequency:"As needed", times:[] (this is the common case for OTC pain relievers, allergy meds taken occasionally, etc. — do not force a fixed schedule onto a genuinely as-needed product)
 - "every other day" → frequency:"Every other day", times:["08:00"]
 - "weekly" → frequency:"Weekly", times:["08:00"]
 If frequency is unclear or not visible, default to Daily at 08:00.
 
-CONFIDENCE: Rate each major field as "high" (clearly readable), "medium" (best guess), or "low" (unclear/inferred).
+CONFIDENCE: Rate each major field as "high" (clearly readable), "medium" (best guess), or "low" (unclear/inferred). A field being "Unknown" because it doesn't apply to an OTC product (prescriber, pharmacy, NDC, patient, refills) is not a low-confidence read — it's simply not present, which is expected and fine.
 
 Return ONLY valid JSON, no other text:
 {"name":"","dose":"","directions":"","prescriber":"","pharmacy":"","refills":"","ndc":"","patient":"","frequency":"Daily","times":["08:00"],"withFood":false,"specialInstructions":"","confidence":{"name":"high","dose":"high","directions":"high","schedule":"high"}}`}
@@ -2667,6 +2992,19 @@ ${toastHTML}
   </div>
 </header>
 
+${state.isOffline?`
+<div style="background:#3a2e14;border-bottom:1px solid #7a5a20;padding:10px 16px;text-align:center">
+  <div style="font-size:12px;color:#e8c890;line-height:1.5">📡 You're offline — changes are saved on this device, but won't sync to your family or other devices until your connection comes back.</div>
+</div>
+`:""}
+
+${state.cloudSyncMissing?`
+<div style="background:#3a1a14;border-bottom:1px solid #7a2a20;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+  <div style="font-size:12px;color:#e8a090;line-height:1.5">⚠️ Not signed in — this device isn't synced or backed up, and you can't invite family members until you sign in.</div>
+  <button data-action="promptSignIn" style="background:#c9a66b;color:#1a1008;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-family:Georgia,serif;cursor:pointer;white-space:nowrap">Sign In</button>
+</div>
+`:""}
+
 ${state.view==="dashboard"?`
 <div class="people-section">
   <div class="people-all-row">
@@ -2680,7 +3018,7 @@ ${state.view==="dashboard"?`
           <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${escapeHtml(p)}">
             <span class="avatar" style="background:${getColor(p)}">${escapeHtml(getInitials(p))}</span><span class="person-name-text">${escapeHtml(p)}</span>
           </button>
-          <button class="remove-btn" data-action="removePerson" data-person="${escapeHtml(p)}">×</button>
+          <button class="remove-btn" data-action="removePerson" data-person="${escapeHtml(p)}" aria-label="Remove ${escapeHtml(p)}">×</button>
         </div>`).join("")}
     </div>
   `:""}
@@ -2692,7 +3030,7 @@ ${state.view==="dashboard"?`
           <button class="person-btn ${state.selectedPerson===p?"active":""}" style="${state.selectedPerson===p?`background:${getColor(p)};color:#1a1008;border-color:${getColor(p)}`:""}" data-action="selectPerson" data-person="${escapeHtml(p)}">
             <span class="avatar" style="background:${getColor(p)}">${escapeHtml(getInitials(p))}</span><span class="person-name-text">${escapeHtml(p)}</span>
           </button>
-          <button class="remove-btn" data-action="removePerson" data-person="${escapeHtml(p)}">×</button>
+          <button class="remove-btn" data-action="removePerson" data-person="${escapeHtml(p)}" aria-label="Remove ${escapeHtml(p)}">×</button>
         </div>`).join("")}
     </div>
   `:""}
@@ -2705,9 +3043,9 @@ ${state.view==="dashboard"?`
           <button data-action="setNewPersonKind" data-kind="pet" style="flex:1;padding:8px;border-radius:8px;font-size:13px;cursor:pointer;background:${state.newPersonKind==="pet"?"#c9a66b":"#2a1f14"};color:${state.newPersonKind==="pet"?"#1a1008":"#c9a66b"};border:1px solid ${state.newPersonKind==="pet"?"#c9a66b":"rgba(201,166,107,0.3)"}">🐾 Pet</button>
         </div>
         <div style="display:flex;gap:6px;width:100%">
-          <input class="person-name-input" id="newPersonInput" value="${escapeHtml(state.newPersonName)}" placeholder="Name..." style="flex:1"/>
-          <button class="confirm-btn" data-action="addPerson">✓</button>
-          <button class="cancel-btn" data-action="cancelAddPerson">×</button>
+          <input class="person-name-input" id="newPersonInput" value="${escapeHtml(state.newPersonName)}" placeholder="Name..." aria-label="Name" style="flex:1"/>
+          <button class="confirm-btn" data-action="addPerson" aria-label="Add">✓</button>
+          <button class="cancel-btn" data-action="cancelAddPerson" aria-label="Cancel">×</button>
         </div>
       </div>` : `<button class="add-person-btn" data-action="showAddPerson" style="grid-column:span 3">+ Add Person or Pet</button>`}
   </div>
@@ -2927,11 +3265,11 @@ function buildAdd() {
 
   <div class="form-label">Reminder Times</div>
   <div style="background:#1a1208;border-radius:10px;padding:10px;margin-bottom:12px">
-    ${(f.times||[]).length === 0 ? `<div style="color:#7a6a62;font-size:13px;padding:6px 0">No times set (as-needed medication)</div>` :
+    ${(f.times||[]).length === 0 ? `<div style="color:#a08a7a;font-size:13px;padding:6px 0">No times set (as-needed medication)</div>` :
       f.times.map((t, i) => `
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-          <input type="time" class="form-input" data-time-idx="${i}" value="${t}" style="flex:1;margin:0"/>
-          <button class="remove-btn" data-action="removeTimeFromForm" data-idx="${i}" style="width:36px;height:36px;flex-shrink:0">×</button>
+          <input type="time" class="form-input" data-time-idx="${i}" value="${t}" aria-label="Reminder time ${i+1}" style="flex:1;margin:0"/>
+          <button class="remove-btn" data-action="removeTimeFromForm" data-idx="${i}" style="width:36px;height:36px;flex-shrink:0" aria-label="Remove this time">×</button>
         </div>
       `).join("")
     }
@@ -2944,17 +3282,17 @@ function buildAdd() {
 
 function buildScan() {
   return `
-<div class="section-header"><span>Scan Prescription Label</span></div>
+<div class="section-header"><span>Scan Medication Label</span></div>
 <div class="scan-card">
   <div class="scan-frame ${state.scanActive?"active":""}">
-    ${state.scanImagePreview?`<img class="scan-img" src="${state.scanImagePreview}"/>`:`<div class="scan-placeholder"><div class="icon">📋</div><div>Take a photo of your<br/>prescription label</div></div>`}
+    ${state.scanImagePreview?`<img class="scan-img" src="${state.scanImagePreview}" alt="Medication label photo preview"/>`:`<div class="scan-placeholder"><div class="icon">📋</div><div>Take a photo of your<br/>medication label — prescription<br/>or over-the-counter</div></div>`}
     ${state.scanActive?`<div class="scan-overlay">Optimizing photo & reading label…</div>`:""}
   </div>
   <div class="scan-btn-row">
     <label class="scan-btn">📷 Take Photo<input type="file" accept="image/*" capture="environment" style="display:none" data-upload="scan"/></label>
     <label class="scan-btn secondary">🖼 Choose Image<input type="file" accept="image/*" style="display:none" data-upload="scan"/></label>
   </div>
-  <div style="font-size:11px;color:#7a6a62;text-align:center;margin-top:8px;line-height:1.5">Photos are sent to a third-party AI service to read the label, then discarded — only the extracted details are saved.</div>
+  <div style="font-size:11px;color:#a08a7a;text-align:center;margin-top:8px;line-height:1.5">Photos are sent to a third-party AI service to read the label, then discarded — only the extracted details are saved.</div>
   ${state.scanError?`<div class="error-box">⚠️ ${escapeHtml(state.scanError)}</div>`:""}
   ${state.scanResult?`
     <div class="scan-result-card">
@@ -3013,11 +3351,11 @@ function buildConfirmSchedule() {
 
   <div class="form-label">Reminder Times</div>
   <div style="background:#1a1208;border-radius:10px;padding:10px;margin-bottom:12px">
-    ${c.times.length === 0 ? `<div style="color:#7a6a62;font-size:13px;padding:6px 0">No times set (as-needed medication)</div>` :
+    ${c.times.length === 0 ? `<div style="color:#a08a7a;font-size:13px;padding:6px 0">No times set (as-needed medication)</div>` :
       c.times.map((t, i) => `
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-          <input type="time" class="form-input" data-time-idx="${i}" value="${t}" style="flex:1;margin:0"/>
-          <button class="remove-btn" data-action="removeTimeFromConfirm" data-idx="${i}" style="width:36px;height:36px;flex-shrink:0">×</button>
+          <input type="time" class="form-input" data-time-idx="${i}" value="${t}" aria-label="Reminder time ${i+1}" style="flex:1;margin:0"/>
+          <button class="remove-btn" data-action="removeTimeFromConfirm" data-idx="${i}" style="width:36px;height:36px;flex-shrink:0" aria-label="Remove this time">×</button>
         </div>
       `).join("")
     }
@@ -3052,7 +3390,7 @@ function buildPill() {
 ${state.pillTab==="photo"?`
 <div class="scan-card">
   <div class="scan-frame ${state.pillLoading?"active":""}">
-    ${state.pillImage?`<img class="scan-img" src="${state.pillImage}"/>`:`<div class="scan-placeholder"><div class="icon">💊</div><div>Place pill on white surface<br/>and take a clear photo</div></div>`}
+    ${state.pillImage?`<img class="scan-img" src="${state.pillImage}" alt="Pill photo preview"/>`:`<div class="scan-placeholder"><div class="icon">💊</div><div>Place pill on white surface<br/>and take a clear photo</div></div>`}
     ${state.pillLoading?`<div class="scan-overlay">Identifying pill…</div>`:""}
   </div>
   <div class="scan-btn-row">
@@ -3060,7 +3398,7 @@ ${state.pillTab==="photo"?`
     <label class="scan-btn secondary">🖼 Choose Image<input type="file" accept="image/*" style="display:none" data-upload="pill"/></label>
   </div>
   <div class="hint-text">Tip: Lay pill flat on white paper, show both sides if possible</div>
-  <div style="font-size:11px;color:#7a6a62;text-align:center;margin-top:8px;line-height:1.5">Photos are sent to a third-party AI service to identify the pill, then discarded — only the result is saved.</div>
+  <div style="font-size:11px;color:#a08a7a;text-align:center;margin-top:8px;line-height:1.5">Photos are sent to a third-party AI service to identify the pill, then discarded — only the result is saved.</div>
 </div>`:``}
 ${state.pillTab==="imprint"?`
 <div class="scan-card">
@@ -3093,7 +3431,7 @@ function buildPillResult() {
       ${[["Strength",r.strength],["Shape",r.shape],["Color",r.color],["Imprint",r.imprint],["Category",r.category]].filter(([,v])=>v).map(([k,v])=>`<div class="pill-stat"><div class="pill-stat-label">${k}</div><div class="pill-stat-val">${escapeHtml(v)}</div></div>`).join("")}
     </div>
     <div style="margin-top:10px;font-size:13px;color:#d9c7b9;line-height:1.7"><span style="color:#c9a66b;font-weight:600">Used for: </span>${escapeHtml(r.usedFor)}</div>
-    ${r.howItWorks?`<div style="margin-top:6px;font-size:12px;color:#8a7a70;font-style:italic">${escapeHtml(r.howItWorks)}</div>`:""}
+    ${r.howItWorks?`<div style="margin-top:6px;font-size:12px;color:#a08a7a;font-style:italic">${escapeHtml(r.howItWorks)}</div>`:""}
   </div>
   ${r.commonSideEffects?.length?`<div class="form-card" style="margin-bottom:12px"><div class="section-title-sm">⚠️ Common Side Effects</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${r.commonSideEffects.map(s=>`<span class="tag">${escapeHtml(s)}</span>`).join("")}</div></div>`:""}
   ${r.seriousWarnings?.length?`<div class="form-card" style="margin-bottom:12px;border-left:3px solid #c04040"><div class="section-title-sm" style="color:#e8a090">🚨 Serious Warnings</div>${r.seriousWarnings.map(w=>`<div style="font-size:13px;color:#e8c0b0;padding:5px 0;border-bottom:1px solid #2a2018">• ${escapeHtml(w)}</div>`).join("")}</div>`:""}
@@ -3164,9 +3502,9 @@ ${doc.followUp?`<div class="form-card" style="margin-bottom:12px;border-left:3px
     </div>
   </div>
   <div class="hint-text" style="margin-top:6px">📱 Tip: Screenshot your MyChart results and use Gallery</div>
-  <div style="font-size:11px;color:#7a6a62;text-align:center;margin-top:8px;line-height:1.5">Documents are sent to a third-party AI service (Anthropic) to extract the details, then discarded — only the extracted text is saved.</div>
+  <div style="font-size:11px;color:#a08a7a;text-align:center;margin-top:8px;line-height:1.5">Documents are sent to a third-party AI service (Anthropic) to extract the details, then discarded — only the extracted text is saved.</div>
 </div>
-${state.docUploading?`<div style="background:#261e16;border-radius:12px;padding:16px;text-align:center;margin-bottom:14px;border:1px solid #c9a66b44"><div style="font-size:28px;margin-bottom:8px">🤖</div><div style="color:#c9a66b;font-weight:600;font-size:14px">Claude is reading the document…</div><div style="color:#8a7a70;font-size:12px;margin-top:4px">Extracting lab values, diagnoses & summary</div></div>`:""}
+${state.docUploading?`<div style="background:#261e16;border-radius:12px;padding:16px;text-align:center;margin-bottom:14px;border:1px solid #c9a66b44"><div style="font-size:28px;margin-bottom:8px">🤖</div><div style="color:#c9a66b;font-weight:600;font-size:14px">Claude is reading the document…</div><div style="color:#a08a7a;font-size:12px;margin-top:4px">Extracting lab values, diagnoses & summary</div></div>`:""}
 ${personDocs.length===0&&!state.docUploading?`<div class="empty-state"><div style="font-size:36px;margin-bottom:8px">📂</div>No documents for ${escapeHtml(activePerson)} yet.</div>`:""}
 ${personDocs.map(doc=>`
   <button class="doc-card" style="border-left-color:${getColor(doc.person)}" data-action="viewDoc" data-id="${doc.id}">
@@ -3175,10 +3513,10 @@ ${personDocs.map(doc=>`
       <div style="flex:1;text-align:left">
         <div style="font-weight:700;font-size:14px;color:#f0e6d8">${escapeHtml(doc.title)}</div>
         <div style="font-size:12px;color:#a08a7a;margin-top:2px">${escapeHtml(doc.type)} · ${escapeHtml(doc.uploadDate)}</div>
-        <div style="font-size:12px;color:#8a7a70;margin-top:4px">${escapeHtml(doc.summary?.slice(0,90))}${doc.summary?.length>90?"…":""}</div>
+        <div style="font-size:12px;color:#a08a7a;margin-top:4px">${escapeHtml(doc.summary?.slice(0,90))}${doc.summary?.length>90?"…":""}</div>
         ${doc.keyValues?.some(kv=>kv.flag==="high"||kv.flag==="low")?`<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${doc.keyValues.filter(kv=>kv.flag==="high"||kv.flag==="low").slice(0,3).map(kv=>`<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${FLAG_COLORS[kv.flag]}22;color:${FLAG_COLORS[kv.flag]};font-weight:600">${escapeHtml(kv.label)} ${kv.flag==="high"?"↑":"↓"}</span>`).join("")}</div>`:""}
       </div>
-      <div style="color:#5a4a43;font-size:18px">›</div>
+      <div style="color:#9c8879;font-size:18px">›</div>
     </div>
   </button>`).join("")}`;
 }
@@ -3221,22 +3559,22 @@ function buildEmergency() {
 <div class="emergency-card">
   <div class="section-title-sm">Vitals</div>
   <div class="emergency-grid">
-    ${[["🩸 Blood Type",profile.blood],["🎂 Date of Birth",profile.dob],["⚖️ Weight",profile.weight]].map(([k,v])=>`<div class="emergency-stat"><div style="font-size:10px;color:#8a7a70;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">${k}</div><div style="font-size:15px;font-weight:700">${v?escapeHtml(v):`<span style="color:#5a4a43">Not set</span>`}</div></div>`).join("")}
+    ${[["🩸 Blood Type",profile.blood],["🎂 Date of Birth",profile.dob],["⚖️ Weight",profile.weight]].map(([k,v])=>`<div class="emergency-stat"><div style="font-size:10px;color:#a08a7a;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">${k}</div><div style="font-size:15px;font-weight:700">${v?escapeHtml(v):`<span style="color:#9c8879">Not set</span>`}</div></div>`).join("")}
   </div>
 </div>
 <div class="emergency-card">
   <div class="section-title-sm">⚠️ Allergies</div>
-  ${profile.allergies?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${profile.allergies.split(",").map(a=>a.trim()).filter(Boolean).map(a=>`<span class="allergy-tag">${escapeHtml(a)}</span>`).join("")}</div>`:`<div style="color:#5a4a43;font-size:13px;margin-top:6px">No allergies recorded</div>`}
+  ${profile.allergies?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${profile.allergies.split(",").map(a=>a.trim()).filter(Boolean).map(a=>`<span class="allergy-tag">${escapeHtml(a)}</span>`).join("")}</div>`:`<div style="color:#9c8879;font-size:13px;margin-top:6px">No allergies recorded</div>`}
 </div>
 <div class="emergency-card">
   <div class="section-title-sm">💊 Current Medications</div>
-  ${personMeds.length===0?`<div style="color:#5a4a43;font-size:13px;margin-top:6px">No medications on file</div>`:""}
+  ${personMeds.length===0?`<div style="color:#9c8879;font-size:13px;margin-top:6px">No medications on file</div>`:""}
   ${personMeds.map(m=>`<div class="emergency-med-row"><div class="med-dot" style="background:${getColor(m.person)};margin-top:4px"></div><div><div style="font-weight:600;font-size:14px">${escapeHtml(m.name)} · ${escapeHtml(m.dose)}</div><div style="color:#a08a7a;font-size:12px">${escapeHtml(m.frequency)}</div></div></div>`).join("")}
 </div>
 ${profile.conditions?`<div class="emergency-card"><div class="section-title-sm">🏥 Medical Conditions</div><div style="font-size:13px;color:#d9c7b9;margin-top:6px;line-height:1.6">${escapeHtml(profile.conditions)}</div></div>`:""}
 <div class="emergency-card">
   <div class="section-title-sm">📞 Contacts</div>
-  ${[["Primary Doctor",profile.doctor,profile.doctorPhone],["Emergency Contact",profile.emergency,profile.emergencyPhone]].map(([label,name,phone])=>`<div style="margin-top:8px"><div style="font-size:11px;color:#8a7a70;text-transform:uppercase;letter-spacing:.05em">${label}</div><div style="font-size:14px;font-weight:600">${name?escapeHtml(name):`<span style="color:#5a4a43">Not set</span>`}</div>${phone?`<div style="font-size:13px;color:#c9a66b">${escapeHtml(phone)}</div>`:""}</div>`).join("")}
+  ${[["Primary Doctor",profile.doctor,profile.doctorPhone],["Emergency Contact",profile.emergency,profile.emergencyPhone]].map(([label,name,phone])=>`<div style="margin-top:8px"><div style="font-size:11px;color:#a08a7a;text-transform:uppercase;letter-spacing:.05em">${label}</div><div style="font-size:14px;font-weight:600">${name?escapeHtml(name):`<span style="color:#9c8879">Not set</span>`}</div>${phone?`<div style="font-size:13px;color:#c9a66b">${escapeHtml(phone)}</div>`:""}</div>`).join("")}
 </div>
 <button class="add-btn" style="width:100%;padding:12px;border-radius:12px;font-size:14px;margin-top:4px" data-action="startEditEmergency">✏️ Edit ${escapeHtml(activePerson)}'s Info</button>`;
 }
@@ -3272,10 +3610,10 @@ function buildReport(filtered) {
 </div>
 <div class="form-card" style="margin-bottom:14px">
   <div style="font-weight:700;font-size:14px;margin-bottom:12px">Medication Breakdown</div>
-  ${personMeds.length===0?`<div style="color:#5a4a43;font-size:13px">No medications on file</div>`:""}
+  ${personMeds.length===0?`<div style="color:#9c8879;font-size:13px">No medications on file</div>`:""}
   ${personMeds.map(med=>{
     const takenToday=isTakenToday(med); const pct2=takenToday?100:0; const c=getColor(med.person);
-    return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px"><span style="font-weight:600">${escapeHtml(med.name)} <span style="color:#8a7a70;font-weight:400">· ${escapeHtml(med.dose)}</span></span><span style="color:${c};font-weight:700">${pct2}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct2}%;background:${c}"></div></div><div style="font-size:11px;color:#8a7a70;margin-top:3px">${escapeHtml(med.frequency)} · ${takenToday?"✓ Taken today":"⏳ Pending today"}</div></div>`;
+    return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px"><span style="font-weight:600">${escapeHtml(med.name)} <span style="color:#a08a7a;font-weight:400">· ${escapeHtml(med.dose)}</span></span><span style="color:${c};font-weight:700">${pct2}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct2}%;background:${c}"></div></div><div style="font-size:11px;color:#a08a7a;margin-top:3px">${escapeHtml(med.frequency)} · ${takenToday?"✓ Taken today":"⏳ Pending today"}</div></div>`;
   }).join("")}
 </div>
 <div class="form-card">
@@ -3290,9 +3628,9 @@ function buildReport(filtered) {
   <div style="font-size:12px;color:#a0896e;margin-bottom:12px">Everyone below shares the same live medication list, on any device.</div>
   ${state.editingDisplayName ? `
     <div style="display:flex;gap:6px;margin-bottom:12px">
-      <input id="displayNameInput" value="${escapeHtml(state.displayNameInput)}" placeholder="Your name..." style="flex:1;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8"/>
-      <button data-action="saveDisplayName" style="background:#c9a66b;color:#1e1610;border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer">✓</button>
-      <button data-action="cancelEditDisplayName" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer">×</button>
+      <input id="displayNameInput" value="${escapeHtml(state.displayNameInput)}" placeholder="Your name..." aria-label="Your name" style="flex:1;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8"/>
+      <button data-action="saveDisplayName" style="background:#c9a66b;color:#1e1610;border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer" aria-label="Save name">✓</button>
+      <button data-action="cancelEditDisplayName" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer" aria-label="Cancel">×</button>
     </div>
   ` : `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;font-size:12px;color:#a0896e">
@@ -3316,15 +3654,15 @@ function buildReport(filtered) {
     if (isEditingName) {
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0">
         <span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px;flex-shrink:0">${escapeHtml(getInitials(p))}</span>
-        <input id="familyMemberNameInput" value="${escapeHtml(state.familyMemberNameInput)}" style="flex:1;min-width:0;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 8px;font-size:13px;color:#f0e6d8"/>
-        <button data-action="saveFamilyMemberName" data-fm-id="${fm.id}" style="background:#c9a66b;color:#1e1610;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0">✓</button>
-        <button data-action="cancelEditFamilyMemberName" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0">×</button>
+        <input id="familyMemberNameInput" value="${escapeHtml(state.familyMemberNameInput)}" aria-label="Family member name" style="flex:1;min-width:0;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 8px;font-size:13px;color:#f0e6d8"/>
+        <button data-action="saveFamilyMemberName" data-fm-id="${fm.id}" style="background:#c9a66b;color:#1e1610;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0" aria-label="Save name">✓</button>
+        <button data-action="cancelEditFamilyMemberName" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;flex-shrink:0" aria-label="Cancel">×</button>
       </div>`;
     }
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0">
       <div style="display:flex;align-items:center;gap:8px">
         <span class="avatar" style="background:${getColor(p)};width:24px;height:24px;font-size:11px">${escapeHtml(getInitials(p))}</span>
-        <div><div style="font-size:13px">${escapeHtml(p)} ${fm?`<button data-action="showEditFamilyMemberName" data-fm-id="${fm.id}" title="Rename" style="background:none;border:none;color:#a0896e;font-size:11px;cursor:pointer;padding:0">✎</button>`:""}</div><div style="font-size:11px;color:#a0896e">${status}</div></div>
+        <div><div style="font-size:13px">${escapeHtml(p)} ${fm?`<button data-action="showEditFamilyMemberName" data-fm-id="${fm.id}" title="Rename" aria-label="Rename ${escapeHtml(p)}" style="background:none;border:none;color:#a0896e;font-size:11px;cursor:pointer;padding:0">✎</button>`:""}</div><div style="font-size:11px;color:#a0896e">${status}</div></div>
       </div>
       ${fm?`<select data-caregiver-select data-fm-id="${fm.id}" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:6px 8px;font-size:12px;cursor:pointer;flex-shrink:0">
         <option value="" disabled ${!fm.caregiver_user_id?"selected":""}>Assign to...</option>
@@ -3345,26 +3683,32 @@ function buildReport(filtered) {
 </div>
 
 <div style="margin-top:20px;padding:16px;background:#1a1208;border-radius:14px;border:1px solid #3a2e24;text-align:center">
-  <div style="font-size:12px;color:#5a4a43;margin-bottom:10px;letter-spacing:.05em;text-transform:uppercase">App Settings</div>
+  <div style="font-size:12px;color:#9c8879;margin-bottom:10px;letter-spacing:.05em;text-transform:uppercase">App Settings</div>
+  ${state.currentUserEmail?`<div style="font-size:12px;color:#a0896e;margin-bottom:14px">Signed in as <strong style="color:#c9a66b">${escapeHtml(state.currentUserEmail)}</strong></div>`:`<div style="font-size:12px;color:#e8a090;margin-bottom:14px">⚠️ Not signed in</div>`}
   <button data-action="resetApp" style="background:#3a1a14;color:#e8a090;border:1px solid #7a2a20;border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">🗑️ Reset This Device</button>
-  <div style="font-size:11px;color:#4a3a34;margin-top:8px;line-height:1.5">Clears saved data on THIS device only — your account and cloud data are untouched. Use this to start fresh on a shared device.</div>
+  <div style="font-size:11px;color:#9c8879;margin-top:8px;line-height:1.5">Clears saved data on THIS device only — your account and cloud data are untouched. Use this to start fresh on a shared device.</div>
 
   <div style="margin-top:16px;padding-top:16px;border-top:1px solid #3a2e24">
     <button data-action="signOutOtherDevices" ${state.signingOutOthers?"disabled":""} style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%;opacity:${state.signingOutOthers?0.6:1}">${state.signingOutOthers?"Signing out...":"🔒 Sign Out of Other Devices"}</button>
-    <div style="font-size:11px;color:#4a3a34;margin-top:8px;line-height:1.5">Lost your phone, or think someone else is signed in? This signs out every OTHER device using your account — this one stays signed in.</div>
+    <div style="font-size:11px;color:#9c8879;margin-top:8px;line-height:1.5">Lost your phone, or think someone else is signed in? This signs out every OTHER device using your account — this one stays signed in.</div>
+  </div>
+
+  <div style="margin-top:16px;padding-top:16px;border-top:1px solid #3a2e24">
+    <button data-action="exportMyData" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">⬇️ Export My Data</button>
+    <div style="font-size:11px;color:#9c8879;margin-top:8px;line-height:1.5">Downloads everything in your household — medications, dose history, family members, emergency profiles, and document details — as a single file you can keep or take elsewhere.</div>
   </div>
 
   <div style="margin-top:16px;padding-top:16px;border-top:1px solid #3a2e24">
     ${state.showDeleteAccountConfirm ? `
       <div style="font-size:12px;color:#e8a090;line-height:1.6;margin-bottom:10px">This permanently deletes your account and, if you're the only member of your household, all its medications, history, and documents. This cannot be undone.</div>
-      <input id="deleteAccountConfirmInput" value="${escapeHtml(state.deleteAccountConfirmInput)}" placeholder='Type "DELETE" to confirm' style="width:100%;box-sizing:border-box;background:#1e1610;border:1px solid #7a2a20;border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8;margin-bottom:10px;text-align:center"/>
+      <input id="deleteAccountConfirmInput" value="${escapeHtml(state.deleteAccountConfirmInput)}" placeholder='Type "DELETE" to confirm' aria-label='Type DELETE to confirm' style="width:100%;box-sizing:border-box;background:#1e1610;border:1px solid #7a2a20;border-radius:8px;padding:8px 10px;font-size:13px;color:#f0e6d8;margin-bottom:10px;text-align:center"/>
       <div style="display:flex;gap:8px">
         <button data-action="cancelDeleteAccount" style="flex:1;background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px;font-size:13px;font-family:Georgia,serif;cursor:pointer">Cancel</button>
         <button data-action="confirmDeleteAccount" ${state.deletingAccount?"disabled":""} style="flex:1;background:#7a2a20;color:#f0d8d0;border:1px solid #a03a2a;border-radius:10px;padding:10px;font-size:13px;font-family:Georgia,serif;cursor:pointer;opacity:${state.deletingAccount?0.6:1}">${state.deletingAccount?"Deleting...":"Permanently Delete"}</button>
       </div>
     ` : `
       <button data-action="showDeleteAccount" style="background:none;color:#a05040;border:1px solid #4a2a24;border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">Delete My Account</button>
-      <div style="font-size:11px;color:#4a3a34;margin-top:8px;line-height:1.5">Permanently deletes your account and cloud data. See our <a href="/privacy.html" target="_blank" rel="noopener" style="color:#a05040">Privacy Policy</a> for details.</div>
+      <div style="font-size:11px;color:#9c8879;margin-top:8px;line-height:1.5">Permanently deletes your account and cloud data. See our <a href="/privacy.html" target="_blank" rel="noopener" style="color:#a05040">Privacy Policy</a> for details.</div>
     `}
   </div>
 </div>
@@ -3424,7 +3768,7 @@ function buildReport(filtered) {
 
   <div style="background:#161008;padding:12px 16px;text-align:center;border-top:1px solid rgba(201,166,107,0.1)">
     <div style="font-size:12px;color:#6a5a50;font-style:italic;line-height:1.6;font-family:Georgia,serif">"We don't sell your data or use it for advertising. Ever.<br>The only third parties involved are the ones that make the app work — and we keep what we send them to the minimum needed."</div>
-    <div style="font-size:10px;color:#4a3a34;margin-top:6px;letter-spacing:.06em;text-transform:uppercase">— ScriptSchedule Privacy Promise</div>
+    <div style="font-size:10px;color:#9c8879;margin-top:6px;letter-spacing:.06em;text-transform:uppercase">— ScriptSchedule Privacy Promise</div>
   </div>
   <div style="padding:10px 16px;text-align:center;border-top:1px solid rgba(201,166,107,0.08)">
     <a href="/privacy.html" target="_blank" rel="noopener" style="font-size:11px;color:#c9a66b;text-decoration:underline">Read the full Privacy Policy</a>
@@ -3443,7 +3787,7 @@ ${weekDays.map((d,i)=>{
       <span style="font-weight:${isT?700:400};color:${isT?"#c9a66b":"#d9c7b9"}">${DAYS[d.getDay()]} ${d.getDate()}</span>
       ${isT?`<span class="today-badge">Today</span>`:""}
     </div>
-    ${dayMeds.length===0?`<div style="color:#7a6a62;font-size:13px;padding:4px 0">No scheduled medications</div>`:""}
+    ${dayMeds.length===0?`<div style="color:#a08a7a;font-size:13px;padding:4px 0">No scheduled medications</div>`:""}
     ${dayMeds.map(med=>`<div class="schedule-med-row"><div style="width:8px;height:8px;border-radius:50%;background:${getColor(med.person)};flex-shrink:0"></div><div><div style="font-weight:600;font-size:14px">${escapeHtml(med.name)} · ${escapeHtml(med.dose)}</div><div style="color:#d9c7b9;font-size:12px">${escapeHtml(med.time)} · ${escapeHtml(med.person)}</div></div>${isT&&isTakenToday(med)?`<span class="taken-badge" style="margin-left:auto">✓</span>`:""}</div>`).join("")}
   </div>`;
 }).join("")}`;
@@ -3535,6 +3879,8 @@ function handleAction(e) {
       break;
     }
     case "generateInvite": generateHouseholdInvite(); break;
+    case "promptSignIn": promptSignIn(); break;
+    case "exportMyData": exportMyData(); break;
     case "copyInviteLink": copyInviteLink(); break;
     case "resetApp": {
       if (confirm("Reset all app data? This clears all medications, family members and settings.")) {
@@ -3674,6 +4020,28 @@ window.addEventListener("load", function() {
   });
   if (signinBtn) signinBtn.addEventListener("click", signInExisting);
   if (signinPassword) signinPassword.addEventListener("keydown", e => { if(e.key==="Enter") signInExisting(); });
+
+  // Wire forgot-password toggle + button
+  const forgotToggle = document.getElementById("bg-forgot-toggle");
+  const forgotPanel = document.getElementById("bg-forgot-panel");
+  const forgotBtn = document.getElementById("bg-forgot-btn");
+  const forgotEmail = document.getElementById("bg-forgot-email");
+  if (forgotToggle) forgotToggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    forgotPanel.style.display = forgotPanel.style.display === "none" ? "block" : "none";
+    // Carry over whatever email they'd already typed into the sign-in form
+    const signinEmailEl = document.getElementById("bg-signin-email");
+    if (forgotEmail && !forgotEmail.value && signinEmailEl) forgotEmail.value = signinEmailEl.value;
+  });
+  if (forgotBtn) forgotBtn.addEventListener("click", sendPasswordReset);
+  if (forgotEmail) forgotEmail.addEventListener("keydown", e => { if(e.key==="Enter") sendPasswordReset(); });
+
+  // Wire the "set new password" recovery screen
+  const recoveryBtn = document.getElementById("bg-recovery-btn");
+  const recoveryConfirm = document.getElementById("bg-recovery-password-confirm");
+  if (recoveryBtn) recoveryBtn.addEventListener("click", setNewPassword);
+  if (recoveryConfirm) recoveryConfirm.addEventListener("keydown", e => { if(e.key==="Enter") setNewPassword(); });
+
   if (nameInput) nameInput.addEventListener("keydown", e => { if(e.key==="Enter") emailInput.focus(); });
   if (emailInput) emailInput.addEventListener("keydown", e => { if(e.key==="Enter") submitBetaInfo(); });
 
@@ -3744,7 +4112,7 @@ if ('serviceWorker' in navigator) {
 
 <!-- INSTALL BANNER -->
 <div id="install-banner">
-  <button class="ib-close" onclick="dismissInstallBanner()">×</button>
+  <button class="ib-close" onclick="dismissInstallBanner()" aria-label="Close">×</button>
   <div class="ib-top">
     <div class="ib-icon"><img src="/icon-192.png" alt="ScriptSchedule"></div>
     <div class="ib-words">
@@ -3770,7 +4138,7 @@ if ('serviceWorker' in navigator) {
     <p>Your family prescription manager. Get started in 5 steps.</p>
     <div class="tut-steps">
       <div class="tut-step"><div class="tut-n">1</div><div class="tut-t"><b>Add your family</b> — tap <b>+ Add</b> at the top to add each family member by name.</div></div>
-      <div class="tut-step"><div class="tut-n">2</div><div class="tut-t"><b>Add medications</b> — tap <b>Meds</b> then <b>+ Add Med</b>, or use <b>Scan</b> to photograph a prescription label and auto-fill.</div></div>
+      <div class="tut-step"><div class="tut-n">2</div><div class="tut-t"><b>Add medications</b> — tap <b>Meds</b> then <b>+ Add Med</b>, or use <b>Scan</b> to photograph a label and auto-fill (works for prescriptions and over-the-counter products like Tylenol or vitamins).</div></div>
       <div class="tut-step">
         <div class="tut-n">3</div>
         <div class="tut-t">

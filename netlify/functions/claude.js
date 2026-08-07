@@ -5,6 +5,7 @@
 // each user to 30 calls per 10 minutes — generous for normal scan/pill-ID/
 // document-upload use, but not for a scripted abuse loop.
 const { verifyUser, checkRateLimit } = require("./_shared/security");
+const { captureError } = require("./_shared/sentry");
 
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
@@ -47,6 +48,11 @@ exports.handler = async (event) => {
       body: JSON.stringify(data)
     };
   } catch (err) {
+    // err here is a network-level failure from our own fetch() call (e.g.
+    // connection reset) — never the Anthropic response body itself, which
+    // is returned to the client directly above and never passed through
+    // error handling, so this is safe to forward as-is.
+    captureError("claude:fetch_failed", err);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: err.message })

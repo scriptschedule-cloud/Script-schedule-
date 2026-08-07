@@ -27,6 +27,7 @@
 //   { ok: false, error: "..." }   on failure
 
 const { checkRateLimit } = require("./_shared/security");
+const { captureError } = require("./_shared/sentry");
 
 const SUPABASE_URL = "https://txaezqhbtjbtbxwlveoq.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_DMnbXfeIUUEFf3OICUE-fA_N3gfZZcw";
@@ -53,6 +54,7 @@ exports.handler = async function (event) {
 
   const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!SERVICE_ROLE_KEY) {
+    captureError("delete-account:missing_service_role_key");
     return {
       statusCode: 500,
       headers,
@@ -117,6 +119,7 @@ exports.handler = async function (event) {
 
     if (!deleteResp.ok) {
       const detail = await deleteResp.json().catch(() => ({}));
+      captureError("delete-account:delete_failed", undefined, { status: deleteResp.status });
       return {
         statusCode: 500,
         headers,
@@ -126,6 +129,7 @@ exports.handler = async function (event) {
 
     return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
   } catch (e) {
+    captureError("delete-account:unexpected_error", e);
     return {
       statusCode: 500,
       headers,

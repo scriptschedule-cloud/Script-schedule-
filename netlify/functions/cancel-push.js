@@ -22,6 +22,7 @@
 // to accept a bare medId from anyone with no identity check at all.
 
 const { verifyUser, checkRateLimit } = require("./_shared/security");
+const { captureError } = require("./_shared/sentry");
 
 exports.handler = async function (event, context) {
   const headers = {
@@ -47,6 +48,7 @@ exports.handler = async function (event, context) {
   const REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY;
 
   if (!APP_ID || !REST_API_KEY) {
+    captureError("cancel-push:missing_credentials");
     return {
       statusCode: 500,
       headers,
@@ -160,11 +162,20 @@ exports.handler = async function (event, context) {
       }
     }
   } catch (e) {
+    captureError("cancel-push:unexpected_error", e);
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({ ok: false, error: "unexpected_error", detail: String(e.message || e) })
     };
+  }
+
+  if (failed > 0) {
+    captureError("cancel-push:onesignal_failures", undefined, {
+      failed,
+      cancelled,
+      status: errors[0] && errors[0].status
+    });
   }
 
   return {

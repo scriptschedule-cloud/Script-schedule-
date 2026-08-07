@@ -45,6 +45,7 @@
 
 const { verifyUser, checkRateLimit } = require("./_shared/security");
 const { zonedTimeToUtc, todayInZone, addDays, isValidTimeZone } = require("./_shared/time");
+const { captureError } = require("./_shared/sentry");
 
 exports.handler = async function (event, context) {
   // CORS headers — Netlify Functions are same-origin to the site so this is mostly defensive
@@ -54,6 +55,8 @@ exports.handler = async function (event, context) {
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS"
   };
+
+  try {
 
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 200, headers, body: "" };
@@ -71,6 +74,7 @@ exports.handler = async function (event, context) {
   const REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY;
 
   if (!APP_ID || !REST_API_KEY) {
+    captureError("schedule-push:missing_credentials");
     return {
       statusCode: 500,
       headers,
@@ -269,6 +273,17 @@ exports.handler = async function (event, context) {
     }
   }
 
+  if (failed > 0) {
+    // Only aggregate counts + the first failure's HTTP status go to Sentry —
+    // never the OneSignal error detail itself, since a validation error can
+    // echo back parts of the request.
+    captureError("schedule-push:onesignal_failures", undefined, {
+      failed,
+      scheduled,
+      status: errors[0] && errors[0].status
+    });
+  }
+
   return {
     statusCode: 200,
     headers,
@@ -279,4 +294,13 @@ exports.handler = async function (event, context) {
       errors: errors.slice(0, 5) // cap error detail to avoid huge responses
     })
   };
+
+  } catch (e) {
+    captureError("schedule-push:unexpected_error", e);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ ok: false, error: "unexpected_error", detail: String(e.message || e) })
+    };
+  }
 };
