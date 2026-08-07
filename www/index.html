@@ -493,6 +493,17 @@ textarea.form-input{min-height:72px;resize:vertical}
       <div class="bg-error" id="bg-recovery-error"></div>
     </div>
 
+    <!-- STEP: Two-factor code (shown after password sign-in or password
+         reset, only for accounts that have enabled two-factor auth) -->
+    <div id="bg-step-mfa" style="display:none">
+      <div class="bg-title">Two-Factor Verification</div>
+      <div class="bg-sub">Enter the code from your authenticator app</div>
+      <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="bg-mfa-code" class="bg-input" placeholder="6-digit code" aria-label="6-digit authentication code" autocomplete="one-time-code" style="text-align:center;letter-spacing:0.3em;font-size:20px"/>
+      <button class="bg-btn" id="bg-mfa-btn">Verify</button>
+      <div class="bg-error" id="bg-mfa-error"></div>
+      <div class="bg-footer">Lost access to your authenticator app? Contact support at ccragsdale@gmail.com.</div>
+    </div>
+
     <!-- STEP 2: Name + Email -->
     <div id="bg-step-info" style="display:none">
       <div class="bg-title">Almost there</div>
@@ -613,6 +624,19 @@ let state = {
   deleteAccountConfirmInput: "",
   deletingAccount: false,
   signingOutOthers: false,
+  // Two-factor auth (TOTP). mfaFactors mirrors sbClient.auth.mfa.listFactors()
+  // so the App Settings card can show enrolled/not-enrolled without a fetch
+  // on every render. The enroll* fields hold an in-progress, not-yet-verified
+  // enrollment (QR code + secret) until the user confirms it with a code.
+  mfaFactors: [],
+  mfaEnrolling: false,
+  mfaEnrollFactorId: null,
+  mfaEnrollQr: null,
+  mfaEnrollSecret: null,
+  mfaEnrollCode: "",
+  mfaEnrollError: "",
+  mfaBusy: false,
+  showMfaDisableConfirm: false,
   editMedId: null,
   form: {person:"Your Name",name:"",dose:"",frequency:"Daily",time:"08:00",notes:"",pharmacy:""},
   scanImagePreview: null,
@@ -1219,10 +1243,7 @@ async function signInExisting() {
     return;
   }
 
-  document.getElementById("beta-gate").classList.remove("show");
-  document.getElementById("beta-gate").style.display = "none";
-  document.getElementById("loading").style.display = "flex";
-  setTimeout(realInit, 250);
+  await proceedAfterAuth();
 }
 
 // Sends a password-reset email. redirectTo is explicit (not left to
@@ -1267,7 +1288,7 @@ function showRecoveryScreen() {
   document.getElementById("beta-gate").classList.add("show");
   document.getElementById("beta-gate").style.display = "flex";
   document.getElementById("loading").style.display = "none";
-  ["bg-step-code", "bg-step-info", "bg-step-role"].forEach(id => {
+  ["bg-step-code", "bg-step-info", "bg-step-role", "bg-step-mfa"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = "none";
   });
@@ -1304,10 +1325,7 @@ async function setNewPassword() {
     return;
   }
 
-  document.getElementById("beta-gate").classList.remove("show");
-  document.getElementById("beta-gate").style.display = "none";
-  document.getElementById("loading").style.display = "flex";
-  setTimeout(realInit, 250);
+  await proceedAfterAuth();
 }
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
@@ -1400,6 +1418,11 @@ async function loadHouseholdDataFromSupabase() {
   state.cloudSyncMissing = false;
   state.currentUserId = session.user.id;
   state.currentUserEmail = session.user.email;
+  // Fire-and-forget: populates state.mfaFactors for the App Settings card.
+  // Not awaited since it's not on the critical path for loading household
+  // data; refreshMfaFactors() mutates state directly, so an explicit
+  // render() call afterward is what actually reflects it in the UI.
+  refreshMfaFactors().then(() => render());
 
   if (!state.householdId) {
     const { data: membership, error: memErr } = await sbClient
@@ -1963,6 +1986,197 @@ async function signOutOtherDevices() {
     setState({ signingOutOthers: false });
   }
 }
+
+// Two-factor authentication (TOTP), H2 in KNOWN_ISSUES.md.
+//
+// Refreshes state.mfaFactors from Supabase so the App Settings card can
+// show enrolled/not-enrolled without a fetch on every render. Safe to call
+// with no session (e.g. before sign-in) — just leaves the list empty.
+async function refreshMfaFactors() {
+  try {
+    const { data, error } = await sbClient.auth.mfa.listFactors();
+    if (error) { console.warn("listFactors failed", error); return; }
+    state.mfaFactors = (data && data.totp) || [];
+  } catch (e) {
+    console.warn("refreshMfaFactors failed", e);
+  }
+}
+
+// Starts enrollment: Supabase returns a QR code (SVG data URI) and a
+// fallback secret before the factor is actually active — it only becomes
+// usable once verifyMfaEnrollment() confirms the user's authenticator app
+// is actually generating matching codes.
+async function startMfaEnrollment() {
+  setState({ mfaBusy: true, mfaEnrollError: "" });
+  try {
+    const { data, error } = await sbClient.auth.mfa.enroll({ factorType: "totp" });
+    if (error || !data) {
+      showToast("Couldn't start two-factor setup — try again.", "error");
+      setState({ mfaBusy: false });
+      return;
+    }
+    setState({
+      mfaEnrolling: true,
+      mfaEnrollFactorId: data.id,
+      mfaEnrollQr: data.totp.qr_code,
+      mfaEnrollSecret: data.totp.secret,
+      mfaEnrollCode: "",
+      mfaEnrollError: "",
+      mfaBusy: false
+    });
+  } catch (e) {
+    console.warn("startMfaEnrollment failed", e);
+    showToast("Couldn't start two-factor setup — try again.", "error");
+    setState({ mfaBusy: false });
+  }
+}
+
+// Abandons an in-progress (not-yet-verified) enrollment — unenrolls the
+// half-created factor server-side too, so it doesn't linger as a dangling
+// unverified factor if the user starts over later.
+async function cancelMfaEnrollment() {
+  const factorId = state.mfaEnrollFactorId;
+  setState({
+    mfaEnrolling: false, mfaEnrollFactorId: null, mfaEnrollQr: null,
+    mfaEnrollSecret: null, mfaEnrollCode: "", mfaEnrollError: ""
+  });
+  if (factorId) {
+    try { await sbClient.auth.mfa.unenroll({ factorId }); } catch (e) { console.warn("cancelMfaEnrollment unenroll failed", e); }
+  }
+}
+
+async function verifyMfaEnrollment() {
+  const factorId = state.mfaEnrollFactorId;
+  const code = (state.mfaEnrollCode || "").trim();
+  if (!/^\d{6}$/.test(code)) {
+    setState({ mfaEnrollError: "Enter the 6-digit code from your authenticator app." });
+    return;
+  }
+  setState({ mfaBusy: true, mfaEnrollError: "" });
+  try {
+    const { data: challengeData, error: challengeError } = await sbClient.auth.mfa.challenge({ factorId });
+    if (challengeError || !challengeData) {
+      setState({ mfaBusy: false, mfaEnrollError: "Something went wrong — try again." });
+      return;
+    }
+    const { error: verifyError } = await sbClient.auth.mfa.verify({
+      factorId, challengeId: challengeData.id, code
+    });
+    if (verifyError) {
+      setState({ mfaBusy: false, mfaEnrollError: "Incorrect code — try again." });
+      return;
+    }
+    await refreshMfaFactors();
+    setState({
+      mfaEnrolling: false, mfaEnrollFactorId: null, mfaEnrollQr: null,
+      mfaEnrollSecret: null, mfaEnrollCode: "", mfaEnrollError: "", mfaBusy: false
+    });
+    showToast("✓ Two-factor authentication enabled");
+  } catch (e) {
+    console.warn("verifyMfaEnrollment failed", e);
+    setState({ mfaBusy: false, mfaEnrollError: "Something went wrong — try again." });
+  }
+}
+
+async function disableMfa() {
+  const factor = state.mfaFactors[0];
+  if (!factor) { setState({ showMfaDisableConfirm: false }); return; }
+  setState({ mfaBusy: true });
+  try {
+    const { error } = await sbClient.auth.mfa.unenroll({ factorId: factor.id });
+    if (error) {
+      console.warn("disableMfa failed", error);
+      showToast("Couldn't disable two-factor authentication — try again.", "error");
+      setState({ mfaBusy: false });
+      return;
+    }
+    await refreshMfaFactors();
+    setState({ showMfaDisableConfirm: false, mfaBusy: false });
+    showToast("Two-factor authentication disabled");
+  } catch (e) {
+    console.warn("disableMfa failed", e);
+    showToast("Couldn't disable two-factor authentication — try again.", "error");
+    setState({ mfaBusy: false });
+  }
+}
+
+// Shared exit point for every flow that produces a fresh Supabase session
+// (password sign-in, password recovery) — checks whether this account has
+// an MFA factor enrolled and, if so, requires a verification code before
+// granting access. This is the actual security boundary: gating only the
+// normal sign-in form and not password recovery would make MFA trivially
+// bypassable by anyone who can get a password-reset email through.
+async function proceedAfterAuth() {
+  let requireMfa = false;
+  try {
+    const { data } = await sbClient.auth.mfa.getAuthenticatorAssuranceLevel();
+    requireMfa = !!(data && data.nextLevel === "aal2" && data.nextLevel !== data.currentLevel);
+  } catch (e) { console.warn("MFA level check failed", e); }
+
+  if (requireMfa) {
+    showMfaChallengeStep();
+    return;
+  }
+  document.getElementById("beta-gate").classList.remove("show");
+  document.getElementById("beta-gate").style.display = "none";
+  document.getElementById("loading").style.display = "flex";
+  setTimeout(realInit, 250);
+}
+
+function showMfaChallengeStep() {
+  document.getElementById("beta-gate").classList.add("show");
+  document.getElementById("beta-gate").style.display = "flex";
+  document.getElementById("loading").style.display = "none";
+  ["bg-step-code", "bg-step-info", "bg-step-role", "bg-step-recovery"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  document.getElementById("bg-step-mfa").style.display = "block";
+  const codeEl = document.getElementById("bg-mfa-code");
+  if (codeEl) { codeEl.value = ""; codeEl.focus(); }
+}
+
+async function submitMfaChallenge() {
+  const codeEl = document.getElementById("bg-mfa-code");
+  const errorEl = document.getElementById("bg-mfa-error");
+  const btn = document.getElementById("bg-mfa-btn");
+  const code = (codeEl.value || "").trim();
+  if (!/^\d{6}$/.test(code)) {
+    errorEl.textContent = "Enter the 6-digit code from your authenticator app.";
+    return;
+  }
+  errorEl.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "Verifying...";
+  try {
+    const { data: factorsData, error: factorsError } = await sbClient.auth.mfa.listFactors();
+    const factor = factorsData && factorsData.totp && factorsData.totp[0];
+    if (factorsError || !factor) {
+      errorEl.textContent = "Couldn't find your authenticator — contact support.";
+      return;
+    }
+    const { data: challengeData, error: challengeError } = await sbClient.auth.mfa.challenge({ factorId: factor.id });
+    if (challengeError || !challengeData) {
+      errorEl.textContent = "Something went wrong — try again.";
+      return;
+    }
+    const { error: verifyError } = await sbClient.auth.mfa.verify({
+      factorId: factor.id, challengeId: challengeData.id, code
+    });
+    if (verifyError) {
+      errorEl.textContent = "Incorrect code — try again.";
+      return;
+    }
+    document.getElementById("beta-gate").classList.remove("show");
+    document.getElementById("beta-gate").style.display = "none";
+    document.getElementById("loading").style.display = "flex";
+    setTimeout(realInit, 250);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Verify";
+  }
+}
+
 // Downloads everything in the current household as a single JSON file —
 // medications, dose history, family members, emergency profiles, and
 // document details (metadata/extracted fields only; the underlying photos
@@ -3734,6 +3948,35 @@ function buildReport(filtered) {
   </div>
 
   <div style="margin-top:16px;padding-top:16px;border-top:1px solid #3a2e24">
+    ${state.mfaEnrolling ? `
+      <div style="font-size:13px;color:#f0e6d8;font-weight:700;margin-bottom:8px">Set Up Two-Factor Authentication</div>
+      <div style="font-size:11px;color:#9c8879;margin-bottom:10px;line-height:1.5">Scan this QR code with an authenticator app (Google Authenticator, Authy, 1Password, etc.), then enter the 6-digit code it shows.</div>
+      ${state.mfaEnrollQr ? `<img src="${state.mfaEnrollQr}" alt="Two-factor setup QR code" style="width:180px;height:180px;background:#fff;border-radius:8px;padding:8px;display:block;margin:0 auto 10px"/>` : ""}
+      ${state.mfaEnrollSecret ? `<div style="font-size:10px;color:#9c8879;margin-bottom:10px;word-break:break-all">Can't scan? Enter this key manually: <span style="color:#c9a66b;font-family:monospace">${escapeHtml(state.mfaEnrollSecret)}</span></div>` : ""}
+      <input id="mfaEnrollCodeInput" value="${escapeHtml(state.mfaEnrollCode)}" inputmode="numeric" maxlength="6" placeholder="6-digit code" aria-label="6-digit verification code" style="width:100%;box-sizing:border-box;background:#1e1610;border:1px solid rgba(201,166,107,0.3);border-radius:8px;padding:8px 10px;font-size:16px;color:#f0e6d8;margin-bottom:10px;text-align:center;letter-spacing:0.3em"/>
+      ${state.mfaEnrollError ? `<div style="font-size:12px;color:#e8a090;margin-bottom:10px">${escapeHtml(state.mfaEnrollError)}</div>` : ""}
+      <div style="display:flex;gap:8px">
+        <button data-action="cancelMfaEnrollment" style="flex:1;background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px;font-size:13px;font-family:Georgia,serif;cursor:pointer">Cancel</button>
+        <button data-action="verifyMfaEnrollment" ${state.mfaBusy?"disabled":""} style="flex:1;background:#3a5a3a;color:#d8f0d8;border:1px solid #4a7a4a;border-radius:10px;padding:10px;font-size:13px;font-family:Georgia,serif;cursor:pointer;opacity:${state.mfaBusy?0.6:1}">${state.mfaBusy?"Verifying...":"Verify & Enable"}</button>
+      </div>
+    ` : state.mfaFactors.length > 0 ? `
+      <div style="font-size:12px;color:#8fbf8a;margin-bottom:10px">✓ Two-factor authentication is enabled</div>
+      ${state.showMfaDisableConfirm ? `
+        <div style="font-size:12px;color:#e8a090;line-height:1.6;margin-bottom:10px">Turn off two-factor authentication? Your account will only need a password to sign in.</div>
+        <div style="display:flex;gap:8px">
+          <button data-action="cancelMfaDisable" style="flex:1;background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px;font-size:13px;font-family:Georgia,serif;cursor:pointer">Cancel</button>
+          <button data-action="confirmMfaDisable" ${state.mfaBusy?"disabled":""} style="flex:1;background:#7a2a20;color:#f0d8d0;border:1px solid #a03a2a;border-radius:10px;padding:10px;font-size:13px;font-family:Georgia,serif;cursor:pointer;opacity:${state.mfaBusy?0.6:1}">${state.mfaBusy?"Disabling...":"Disable"}</button>
+        </div>
+      ` : `
+        <button data-action="showMfaDisable" style="background:none;color:#a05040;border:1px solid #4a2a24;border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">Disable Two-Factor Authentication</button>
+      `}
+    ` : `
+      <button data-action="startMfaEnrollment" ${state.mfaBusy?"disabled":""} style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%;opacity:${state.mfaBusy?0.6:1}">🔐 ${state.mfaBusy?"Starting...":"Enable Two-Factor Authentication"}</button>
+      <div style="font-size:11px;color:#9c8879;margin-top:8px;line-height:1.5">Adds a second step (a code from an authenticator app) when signing in — so a leaked or guessed password alone can't get into your account.</div>
+    `}
+  </div>
+
+  <div style="margin-top:16px;padding-top:16px;border-top:1px solid #3a2e24">
     <button data-action="exportMyData" style="background:#2a1f14;color:#c9a66b;border:1px solid rgba(201,166,107,0.3);border-radius:10px;padding:10px 20px;font-size:13px;font-family:Georgia,serif;cursor:pointer;width:100%">⬇️ Export My Data</button>
     <div style="font-size:11px;color:#9c8879;margin-top:8px;line-height:1.5">Downloads everything in your household — medications, dose history, family members, emergency profiles, and document details — as a single file you can keep or take elsewhere.</div>
   </div>
@@ -3916,6 +4159,12 @@ function attachEvents() {
     pi.addEventListener("input", e => { state.pillImprint = e.target.value.toUpperCase(); pi.value = state.pillImprint; });
     pi.addEventListener("keydown", e => { if(e.key==="Enter") identifyByImprint(); });
   }
+  const mfaCode = document.getElementById("mfaEnrollCodeInput");
+  if (mfaCode) {
+    mfaCode.addEventListener("input", e => { state.mfaEnrollCode = e.target.value.replace(/\D/g,"").slice(0,6); mfaCode.value = state.mfaEnrollCode; });
+    mfaCode.addEventListener("keydown", e => { if(e.key==="Enter") verifyMfaEnrollment(); });
+    mfaCode.focus();
+  }
 }
 
 function handleAction(e) {
@@ -3952,6 +4201,12 @@ function handleAction(e) {
       }
       break;
     }
+    case "startMfaEnrollment": startMfaEnrollment(); break;
+    case "cancelMfaEnrollment": cancelMfaEnrollment(); break;
+    case "verifyMfaEnrollment": verifyMfaEnrollment(); break;
+    case "showMfaDisable": setState({showMfaDisableConfirm:true}); break;
+    case "cancelMfaDisable": setState({showMfaDisableConfirm:false}); break;
+    case "confirmMfaDisable": disableMfa(); break;
     case "generateInvite": generateHouseholdInvite(); break;
     case "promptSignIn": promptSignIn(); break;
     case "exportMyData": exportMyData(); break;
@@ -4115,6 +4370,13 @@ window.addEventListener("load", function() {
   const recoveryConfirm = document.getElementById("bg-recovery-password-confirm");
   if (recoveryBtn) recoveryBtn.addEventListener("click", setNewPassword);
   if (recoveryConfirm) recoveryConfirm.addEventListener("keydown", e => { if(e.key==="Enter") setNewPassword(); });
+
+  // Wire the two-factor challenge screen (shown after sign-in/recovery when
+  // the account has MFA enrolled)
+  const mfaBtn = document.getElementById("bg-mfa-btn");
+  const mfaCodeEl = document.getElementById("bg-mfa-code");
+  if (mfaBtn) mfaBtn.addEventListener("click", submitMfaChallenge);
+  if (mfaCodeEl) mfaCodeEl.addEventListener("keydown", e => { if(e.key==="Enter") submitMfaChallenge(); });
 
   if (nameInput) nameInput.addEventListener("keydown", e => { if(e.key==="Enter") emailInput.focus(); });
   if (emailInput) emailInput.addEventListener("keydown", e => { if(e.key==="Enter") submitBetaInfo(); });
