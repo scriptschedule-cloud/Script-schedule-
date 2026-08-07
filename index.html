@@ -2128,10 +2128,47 @@ function formatTime12(t) {
 // Get all dose-events for today across all meds
 function getTodayDoses() {
   const today = todayStr();
+  const todayDate = new Date();
+  const dayOfWeek = todayDate.getDay(); // 0=Sunday, 6=Saturday
+  const dayOfMonth = todayDate.getDate();
   const events = [];
+  
   state.meds.forEach(m => {
     if (m.frequency === "As needed") return;
     if (isPastCourse(m) || isArchived(m)) return;
+    
+    // Check if this med should be taken today based on frequency
+    let shouldTakeToday = false;
+    const freq = m.frequency;
+    
+    if (freq === "Daily") {
+      shouldTakeToday = true;
+    } else if (freq === "Twice weekly") {
+      // Show on Monday and Thursday (or every other day starting from current)
+      shouldTakeToday = dayOfWeek === 1 || dayOfWeek === 4; // Mon=1, Thu=4
+    } else if (freq === "Weekly") {
+      // Show on current day of week (or if this is the med's scheduled day)
+      shouldTakeToday = true; // Simplified: show weekly meds today, ideally use med.scheduledDay
+    } else if (freq === "Every other day") {
+      // Show on alternating days (store start date in med object ideally)
+      shouldTakeToday = dayOfMonth % 2 === 0;
+    } else if (freq === "Monthly (every 30 days)") {
+      // For now, show on the 1st of month or based on creation date
+      shouldTakeToday = dayOfMonth === 1;
+    } else if (freq === "Monthly (specific date)") {
+      // Extract target day from notes or specialInstructions
+      const dateMatch = m.notes?.match(/\b(\d{1,2})(?:st|nd|rd|th)?\b/) || m.specialInstructions?.match(/\b(\d{1,2})(?:st|nd|rd|th)?\b/);
+      if (dateMatch) {
+        const targetDay = parseInt(dateMatch[1]);
+        shouldTakeToday = dayOfMonth === targetDay;
+      } else {
+        // Default to first of month
+        shouldTakeToday = dayOfMonth === 1;
+      }
+    }
+    
+    if (!shouldTakeToday) return;
+    
     const times = (m.times && m.times.length) ? m.times : (m.time ? [m.time] : []);
     times.forEach(t => {
       const key = doseKey(m.id, today, t);
@@ -2761,7 +2798,10 @@ Map directions text to structured fields:
 - "four times daily", "every 6 hours", "QID" → frequency:"Four times daily", times:["08:00","12:00","16:00","20:00"]
 - "as needed", "PRN", "every 4-6 hours as needed", "do not exceed X in 24 hours" → frequency:"As needed", times:[] (this is the common case for OTC pain relievers, allergy meds taken occasionally, etc. — do not force a fixed schedule onto a genuinely as-needed product)
 - "every other day" → frequency:"Every other day", times:["08:00"]
-- "weekly" → frequency:"Weekly", times:["08:00"]
+- "twice weekly", "twice a week", "2x per week", "two times weekly" → frequency:"Twice weekly", times:["08:00"]
+- "weekly", "once weekly", "once a week", "every 7 days", "QW" → frequency:"Weekly", times:["08:00"]
+- "monthly", "once monthly", "once a month", "every 30 days", "every month" → frequency:"Monthly (every 30 days)", times:["08:00"]
+- If month-specific dates appear (e.g., "1st of every month", "15th of each month", "first Monday"), use frequency:"Monthly (specific date)", times:["08:00"], add the specific details to specialInstructions
 If frequency is unclear or not visible, default to Daily at 08:00.
 
 CONFIDENCE: Rate each major field as "high" (clearly readable), "medium" (best guess), or "low" (unclear/inferred). A field being "Unknown" because it doesn't apply to an OTC product (prescriber, pharmacy, NDC, patient, refills) is not a low-confidence read — it's simply not present, which is expected and fine.
@@ -3215,7 +3255,7 @@ function buildScan() {
 function buildConfirmSchedule() {
   const c = state.scheduleConfirm;
   if (!c) return `<div class="empty-state">No schedule to confirm.</div>`;
-  const FREQ_OPTIONS = ["Daily","Twice daily","Three times daily","Four times daily","Every other day","Weekly","As needed"];
+  const FREQ_OPTIONS = ["Daily","Twice daily","Three times daily","Four times daily","Every other day","Twice weekly","Weekly","Monthly (every 30 days)","Monthly (specific date)","As needed"];
   const conf = c.confidence || {};
   const lowFields = ["name","dose","directions","schedule"].filter(f => conf[f] === "low");
   const hasLow = lowFields.length > 0;
@@ -3684,11 +3724,45 @@ function buildReport(filtered) {
 }
 
 function buildSchedule(filtered, weekDays) {
+  // Helper to determine if a medication should show on a given day
+  function shouldShowOnDay(med, dayIndex, dayDate) {
+    const freq = med.frequency;
+    if (freq === "Daily") return true;
+    if (freq === "As needed") return false;
+    
+    // Twice weekly: show every 3-4 days (Mon & Thu pattern, or Tue & Fri, etc.)
+    if (freq === "Twice weekly") return dayIndex % 3 === 0 || dayIndex % 3 === 3;
+    
+    // Every other day: alternate days
+    if (freq === "Every other day") return dayIndex % 2 === 0;
+    
+    // Weekly: show once per week (on the first day in the view or same day of week)
+    if (freq === "Weekly") return dayIndex === 0;
+    
+    // Monthly frequencies: show if it falls on the appropriate day
+    if (freq === "Monthly (every 30 days)") {
+      // Show on the first occurrence in the 7-day view
+      return dayIndex === 0;
+    }
+    if (freq === "Monthly (specific date)") {
+      // Extract the target date from specialInstructions or default to first of month
+      const dateMatch = med.notes?.match(/\b(\d{1,2})(?:st|nd|rd|th)?\b/) || med.specialInstructions?.match(/\b(\d{1,2})(?:st|nd|rd|th)?\b/);
+      if (dateMatch) {
+        const targetDay = parseInt(dateMatch[1]);
+        return dayDate.getDate() === targetDay;
+      }
+      // Default to first of month
+      return dayDate.getDate() === 1;
+    }
+    
+    return true;
+  }
+  
   return `
 <div class="section-header"><span>Weekly Schedule</span></div>
 ${weekDays.map((d,i)=>{
   const isT=d.toDateString()===today.toDateString();
-  const dayMeds=filtered.filter(m=>m.frequency==="Daily"||(m.frequency==="Twice weekly"&&i%3===0));
+  const dayMeds=filtered.filter(m=>shouldShowOnDay(m, i, d));
   return `<div class="schedule-day" style="${isT?"border-left-color:#c9a66b":""}">
     <div class="schedule-day-header">
       <span style="font-weight:${isT?700:400};color:${isT?"#c9a66b":"#d9c7b9"}">${DAYS[d.getDay()]} ${d.getDate()}</span>
