@@ -4,7 +4,7 @@
 // IMPORTANT: When deploying updates, BUMP THE CACHE_VERSION below.
 // Otherwise users will see the old cached version of the app.
 
-const CACHE_VERSION = "scriptschedule-v6";
+const CACHE_VERSION = "scriptschedule-v7";
 
 // Import OneSignal SDK Worker — this gives us push notification handling
 importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
