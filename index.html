@@ -4409,7 +4409,14 @@ if ('serviceWorker' in navigator) {
 }
 
 // ── INSTALL BANNER ───────────────────────────────────────────────────────────
-(function() {
+// Runs on DOMContentLoaded, not immediately: this script tag executes
+// mid-parse, before the #install-banner markup below it (which contains
+// #btn-install, #android-section, #ios-steps) exists in the DOM yet —
+// calling getElementById for those here unconditionally threw a real
+// uncaught TypeError on every single page load (first surfaced by Sentry;
+// predates that — this bug was silent before there was any error
+// monitoring to catch it).
+document.addEventListener('DOMContentLoaded', function() {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   let installPrompt = null;
@@ -4443,7 +4450,7 @@ if ('serviceWorker' in navigator) {
     document.getElementById('ios-steps').style.display = 'flex';
     setTimeout(showBanner, 1000);
   }
-})();
+});
 </script>
 
 <!-- INSTALL BANNER -->
