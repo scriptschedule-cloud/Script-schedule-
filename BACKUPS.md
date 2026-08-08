@@ -13,10 +13,11 @@ This repo is **public**, so anyone can see the workflow file itself and its logs
 even in a public repo's logs.
 
 1. **`SUPABASE_DB_URL`** — the database connection string.
-   - Supabase dashboard → this project → **Project Settings → Database → Connection string**.
-   - Use the **Direct connection** string (port `5432`), not the pooler — `pg_dump` needs a stable session. It looks like:
-     `postgresql://postgres:[YOUR-PASSWORD]@db.txaezqhbtjbtbxwlveoq.supabase.co:5432/postgres`
-   - Copy it with the real password filled in.
+   - Supabase dashboard → this project → **Connect** button (top of the page) → **Direct connection** tab.
+   - Use the **Session pooler** option, not "Direct connection" itself — despite the tab's name, "Direct connection" only resolves over IPv6 unless you pay for Supabase's IPv4 add-on, and GitHub Actions runners have no IPv6 route (this failed with `Network is unreachable` before switching). Session pooler works over IPv4 for free and is what this workflow actually needs. It looks like:
+     `postgresql://postgres.txaezqhbtjbtbxwlveoq:[YOUR-PASSWORD]@aws-1-us-east-2.pooler.supabase.com:5432/postgres`
+     (note the `postgres.txaezqhbtjbtbxwlveoq` username format — different from Direct connection's plain `postgres`)
+   - Copy it with the real password filled in, and paste it as **one single line with no trailing blank line** — a stray newline after `/postgres` causes `pg_dump: error: ... database "postgres\n" does not exist`, which is exactly what happened the first time.
 
 2. **`BACKUP_PASSPHRASE`** — a long random passphrase *you* generate, not Claude. This encrypts every backup; anyone with this passphrase (or the Supabase DB password above) can read your household's full medical data, so treat it exactly like that.
    - Generate one locally: `openssl rand -base64 32`
@@ -37,6 +38,7 @@ even in a public repo's logs.
    ```bash
    psql "postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres" -f backup.sql
    ```
+   This Direct connection string usually works fine here since you're running it from your own machine (with normal internet routing), not a GitHub Actions runner — but if you hit `Network is unreachable`, swap in the Session pooler connection string instead (same format as `SUPABASE_DB_URL` above).
 4. **Never run step 3 directly against the live production database** unless you've already confirmed data loss and deliberately intend to overwrite it — restoring is itself a destructive operation on whatever it targets.
 
 ## Limitations of this approach (vs. Supabase Pro's built-in backups)
