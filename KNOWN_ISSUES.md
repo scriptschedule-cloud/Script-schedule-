@@ -10,7 +10,7 @@ Running log of open issues. Full detail (why it matters, recommended fix, test p
 ## Open — High
 
 - **H3** — No automatic session expiry; lost/stolen device stays signed in until manually revoked from another device. (Checked this session: Supabase's built-in session time-box/inactivity-timeout settings — the correct server-side fix — are Pro-plan only, not available on the free tier currently in use.)
-- **H4b** — No backup-failure alerting specifically. The Sentry error monitoring added this session (see H4 in Resolved below) covers app/function errors but not silent backup-job failures — separate, still open.
+- **H4b** — Turned out to be a bigger gap than "no alerting": Supabase's Free plan (what this project runs on) has **zero automated backups at all** — that's a Pro-plan-only feature. A free scripted substitute now exists (`.github/workflows/backup.yml`, daily encrypted dump to a GitHub Actions artifact — see [BACKUPS.md](BACKUPS.md)), but it can't run yet. **Blocked on you**: add the two GitHub repository secrets `BACKUP_PASSPHRASE` (a passphrase you generate yourself — never Claude) and `SUPABASE_DB_URL` per BACKUPS.md, then trigger a manual run from the Actions tab to confirm it works.
 
 ## Open — Medium / Low
 

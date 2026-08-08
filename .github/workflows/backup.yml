@@ -1,0 +1,71 @@
+name: Database Backup
+
+# Supabase's Free plan (what this project is on) runs zero automated
+# database backups — that's a Pro-plan feature ($25/mo). This is the free
+# alternative: a scheduled dump of the whole database, GPG-encrypted before
+# it ever leaves this job, uploaded as a build artifact. See KNOWN_ISSUES.md
+# H4b and BACKUPS.md (restore instructions) for the full picture.
+#
+# This repo is public, so GitHub Actions artifacts here are downloadable by
+# anyone — not just collaborators. That's exactly why the dump is encrypted
+# with a passphrase that only ever exists as a GitHub Actions secret (never
+# committed, never logged); an attacker who downloads the artifact gets
+# ciphertext, not a household's medication and health data.
+#
+# Requires two repository secrets before this can run successfully —
+# neither exists yet as of this workflow's creation, see BACKUPS.md:
+#   SUPABASE_DB_URL     — the Direct Connection string from Supabase
+#                          (Project Settings → Database → Connection string)
+#   BACKUP_PASSPHRASE   — a long random passphrase you generate yourself
+#                          (e.g. `openssl rand -base64 32`), never Claude
+
+on:
+  schedule:
+    # 08:00 UTC daily = ~3am America/Chicago (CDT) — low-traffic window.
+    - cron: '0 8 * * *'
+  workflow_dispatch: {} # lets you trigger a manual run/test from the Actions tab
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set — see BACKUPS.md to configure it."
+            exit 1
+          fi
+          # Uses the official postgres image's pg_dump so the client version
+          # always matches (or exceeds) Supabase's server version, rather
+          # than depending on whatever apt happens to install on the runner.
+          docker run --rm -e PGCONNECT_TIMEOUT=30 postgres:17 \
+            pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges --format=plain \
+            > backup.sql
+          # Sanity check: a real dump always contains at least a few of
+          # these — an empty/truncated file means pg_dump silently failed
+          # partway through rather than something worth backing up.
+          if ! grep -q "PostgreSQL database dump" backup.sql; then
+            echo "::error::Dump looks empty or invalid — not uploading it as a backup."
+            exit 1
+          fi
+
+      - name: Encrypt dump
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::error::BACKUP_PASSPHRASE secret is not set — see BACKUPS.md to configure it."
+            exit 1
+          fi
+          gpg --batch --yes --passphrase "$BACKUP_PASSPHRASE" --symmetric --cipher-algo AES256 \
+            -o backup.sql.gpg backup.sql
+          shred -u backup.sql
+
+      - name: Upload encrypted backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: scriptschedule-backup-${{ github.run_id }}
+          path: backup.sql.gpg
+          retention-days: 14
